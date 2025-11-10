@@ -66,13 +66,24 @@ def run_example(origin, dest, metro_folder=None, stcp_folder=None,
 
     import json
     solutions = []
+    seen = set()
     for ind in pop:
-        t, e, w = G.path_metrics(list(ind))
+        key = tuple(ind)
+        if key in seen: 
+            continue
+        seen.add(key)
+        metrics = G.path_metrics(list(ind))
+        segs = metrics.get("segments") or []
+        time_total = sum(seg.get("time_s", 0.0) for seg in segs)
         solutions.append({
             "path": list(ind),
-            "time_s": t,
-            "emissions_g": e,
-            "walk_m": w
+            "time_s": time_total,
+            "emissions_g": metrics.get("emissions_g"),
+            "walk_m": metrics.get("walk_m"),
+            "fare_cost": metrics.get("fare_cost"),
+            "n_transfers": metrics.get("n_transfers"),
+            "zones_passed": metrics.get("zones_passed"),
+            "segments": metrics.get("segments"),
         })
     with open("pareto_solutions.json", "w") as f:
         json.dump(solutions, f, indent=2)

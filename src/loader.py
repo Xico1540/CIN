@@ -1,6 +1,7 @@
 # python
 import os
 import pandas as pd
+import math
 
 PREFIX_METRO = "METRO"
 PREFIX_STCP = "STCP"
@@ -50,8 +51,40 @@ def _load_csv_if_exists(folder: str, filename: str, required=False, required_col
     if required_cols:
         missing = [c for c in required_cols if c not in df.columns]
         if missing:
-            raise ValueError(f"{filename} missing required columns: {missing} (file: {path})")
+            if required:
+                raise ValueError(f"{filename} missing required columns: {missing} (file: {path})")
+            for col in missing:
+                df[col] = pd.NA
+    if filename == "fare_attributes.txt" and "price" in df.columns:
+        try:
+            df["price"] = pd.to_numeric(df["price"], errors="raise").astype(float)
+        except Exception as e:
+            raise ValueError(f"Failed to convert fare price to float in {path}: {e}")
     return df, path
+
+def to_seconds(hms: str) -> int:
+    """
+    Converte string HH:MM:SS para segundos inteiros, suportando horas >= 24.
+    """
+    if hms is None or (isinstance(hms, float) and math.isnan(hms)):
+        raise ValueError("Tempo inválido: valor nulo/nan.")
+    if not isinstance(hms, str):
+        hms = str(hms)
+    hms = hms.strip()
+    parts = hms.split(":")
+    if len(parts) != 3:
+        raise ValueError(f"Tempo inválido (esperado HH:MM:SS): {hms}")
+    try:
+        hours = int(parts[0])
+        minutes = int(parts[1])
+        seconds = int(parts[2])
+    except ValueError:
+        raise ValueError(f"Tempo inválido (componentes não inteiros): {hms}")
+    if not (0 <= minutes < 60 and 0 <= seconds < 60):
+        raise ValueError(f"Tempo inválido (minutos/segundos fora do intervalo 0-59): {hms}")
+    if hours < 0:
+        raise ValueError(f"Tempo inválido (horas negativas): {hms}")
+    return hours * 3600 + minutes * 60 + seconds
 
 def load_gtfs(folder: str, prefix: str):
     """
@@ -81,12 +114,19 @@ def load_gtfs(folder: str, prefix: str):
                                                         required_cols=["trip_id"])
 
     # ficheiros opcionais
-    optional_files = [
-        "routes.txt", "shapes.txt", "transfers.txt", "agency.txt",
-        "calendar.txt", "calendar_dates.txt", "fare_attributes.txt", "fare_rules.txt"
-    ]
-    for fname in optional_files:
-        df, p = _load_csv_if_exists(folder, fname, required=False)
+    optional_files = {
+        "routes.txt": None,
+        "shapes.txt": None,
+        "transfers.txt": None,
+        "agency.txt": None,
+        "calendar.txt": None,
+        "calendar_dates.txt": None,
+        "frequencies.txt": ["trip_id", "start_time", "end_time", "headway_secs"],
+        "fare_attributes.txt": ["fare_id", "price", "currency_type", "transfers", "transfer_duration"],
+        "fare_rules.txt": ["fare_id", "route_id", "origin_id", "destination_id", "contains_id"]
+    }
+    for fname, required_cols in optional_files.items():
+        df, p = _load_csv_if_exists(folder, fname, required=False, required_cols=required_cols)
         key = os.path.splitext(fname)[0]  # e.g. routes
         data[key] = df
         paths[key] = p
