@@ -3,13 +3,35 @@ import os
 import pickle
 from loader import load_system, PREFIX_METRO, PREFIX_STCP
 from graph_builder import MultimodalGraph
-from evolution import run_nsga2
+from evolution import PENALTY, run_nsga2
 
 GRAPH_CACHE_FILE = "graph_cache.pkl"
 
+
+def _parse_point(value):
+    if value is None:
+        return None
+    if isinstance(value, (tuple, list)) and len(value) == 2:
+        try:
+            return float(value[0]), float(value[1])
+        except (TypeError, ValueError):
+            return None
+    if isinstance(value, str) and "," in value:
+        parts = value.split(",")
+        if len(parts) != 2:
+            return None
+        try:
+            lat = float(parts[0].strip())
+            lon = float(parts[1].strip())
+            return lat, lon
+        except ValueError:
+            return None
+    return None
+
 # python
 def run_example(origin, dest, metro_folder=None, stcp_folder=None,
-                walk_radius=400, pop_size=50, generations=30):
+                walk_radius=400, pop_size=50, generations=30,
+                wmax_s=None, tmax=None, walk_policy=None, include_cost=False):
 
     def candidate_ids(stop_id):
         s = str(stop_id)
@@ -56,12 +78,35 @@ def run_example(origin, dest, metro_folder=None, stcp_folder=None,
             f"Sample nodes: {list(nodes)[:50]}"
         )
 
-    origin_node = resolve_node(origin)
-    dest_node = resolve_node(dest)
+    def resolve_with_virtual(value, label):
+        point = _parse_point(value)
+        if point:
+            lat, lon = point
+            node_id_base = f"{label}_VIRT"
+            try:
+                node_id = G.add_virtual_point(node_id_base, lat, lon)
+            except ValueError as exc:
+                raise ValueError(f"Não foi possível ligar o ponto virtual '{value}': {exc}") from exc
+            nodes.add(node_id)
+            return node_id
+        return resolve_node(value)
+
+    origin_node = resolve_with_virtual(origin, "ORIGIN")
+    dest_node = resolve_with_virtual(dest, "DEST")
 
     print(f"Origin resolved: {origin_node}, Destination resolved: {dest_node}")
     print("Running NSGA-II...")
-    pop = run_nsga2(G, origin_node, dest_node, pop_size=pop_size, ngen=generations)
+    pop = run_nsga2(
+        G,
+        origin_node,
+        dest_node,
+        pop_size=pop_size,
+        ngen=generations,
+        walk_policy=walk_policy,
+        w_max=wmax_s,
+        t_max=tmax,
+        include_cost=include_cost,
+    )
     print("NSGA-II finished.")
 
     import json
@@ -72,6 +117,8 @@ def run_example(origin, dest, metro_folder=None, stcp_folder=None,
         if key in seen: 
             continue
         seen.add(key)
+        if any(val >= PENALTY for val in ind.fitness.values):
+            continue
         metrics = G.path_metrics(list(ind))
         segs = metrics.get("segments") or []
         time_total = sum(seg.get("time_s", 0.0) for seg in segs)
@@ -83,7 +130,8 @@ def run_example(origin, dest, metro_folder=None, stcp_folder=None,
             "fare_cost": metrics.get("fare_cost"),
             "n_transfers": metrics.get("n_transfers"),
             "zones_passed": metrics.get("zones_passed"),
-            "segments": metrics.get("segments"),
+            "segments": segs,
+            "has_walk": any(seg.get("mode") == "walk" for seg in segs),
         })
     with open("pareto_solutions.json", "w") as f:
         json.dump(solutions, f, indent=2)
@@ -100,10 +148,22 @@ if __name__ == "__main__":
     parser.add_argument("--walk-radius", type=int, default=400, help="Walking radius in meters")
     parser.add_argument("--pop-size", type=int, default=50, help="Population size")
     parser.add_argument("--gens", type=int, default=30, help="Number of generations")
+    parser.add_argument("--wmax-s", type=float, default=None,
+                        help="Limite total de tempo a pé (segundos).")
+    parser.add_argument("--tmax", type=int, default=None,
+                        help="Máximo de transbordos permitidos.")
+    parser.add_argument("--walk-policy", choices=["maximize", "minimize"], default=None,
+                        help="Política para o objetivo de caminhada (maximize por omissão).")
+    parser.add_argument("--include-cost", action="store_true",
+                        help="Adicionar custo como quarto objetivo na otimização.")
     args = parser.parse_args()
 
     run_example(args.origin, args.dest,
                 metro_folder=args.metro, stcp_folder=args.stcp,
                 walk_radius=args.walk_radius,
                 pop_size=args.pop_size,
-                generations=args.gens)
+                generations=args.gens,
+                wmax_s=args.wmax_s,
+                tmax=args.tmax,
+                walk_policy=args.walk_policy,
+                include_cost=args.include_cost)

@@ -57,7 +57,7 @@ def evaluate_individual(graph, individual, walk_policy=None, w_max=None, t_max=N
         return _penalty_tuple(include_cost)
 
     transfers = metrics.get("n_transfers")
-    if t_max is not None and transfers is not None and transfers > t_max:
+    if t_max is not None and transfers is not None and transfers >= t_max:
         return _penalty_tuple(include_cost)
 
     fitness_values = fitness_from_metrics(metrics, walk_policy=walk_policy)

@@ -50,6 +50,7 @@ class MultimodalGraph:
 
         self.route_headways: Dict[Tuple[str, str], float] = {}
         self.headway_by_route: Dict[str, float] = {}
+        self.virtual_nodes: set[str] = set()
         self.G = nx.DiGraph()
         self.node_lookup: Dict[Tuple[str, str], str] = {}
         self._build_nodes()
@@ -182,6 +183,71 @@ class MultimodalGraph:
                         self.G.add_edge(id2, id1, **attrs_backward)
 
     # ---------------------- headways e tarifas ---------------------- #
+
+    def nearest_stops(self, lat: float, lon: float, radius_m: float = 600.0, k: int = 8):
+        candidates = []
+        for node_id, attrs in self.G.nodes(data=True):
+            if attrs.get("mode") in ("metro", "stcp"):
+                dist = haversine(lat, lon, float(attrs.get("lat")), float(attrs.get("lon")))
+                if radius_m is None or dist <= radius_m:
+                    candidates.append((node_id, dist))
+        if not candidates and radius_m is not None:
+            # fallback sem raio para garantir k resultados
+            for node_id, attrs in self.G.nodes(data=True):
+                if attrs.get("mode") in ("metro", "stcp"):
+                    dist = haversine(lat, lon, float(attrs.get("lat")), float(attrs.get("lon")))
+                    candidates.append((node_id, dist))
+        candidates.sort(key=lambda x: x[1])
+        if k is not None and k > 0:
+            candidates = candidates[:k]
+        return candidates
+
+    def add_virtual_point(
+        self,
+        node_id: str,
+        lat: float,
+        lon: float,
+        radius_m: float = 600.0,
+        k: int = 8,
+    ) -> str:
+        base_id = str(node_id)
+        candidate_id = base_id
+        counter = 1
+        while self.G.has_node(candidate_id):
+            candidate_id = f"{base_id}_{counter}"
+            counter += 1
+        node_id = candidate_id
+
+        neighbors = self.nearest_stops(lat, lon, radius_m=radius_m, k=k)
+        if not neighbors:
+            raise ValueError("Nenhuma paragem encontrada para ligar o ponto virtual.")
+
+        self.G.add_node(
+            node_id,
+            lat=float(lat),
+            lon=float(lon),
+            mode="virtual",
+            zone_id=None,
+            stop_id=node_id,
+            prefix="virtual",
+        )
+        self.virtual_nodes.add(node_id)
+
+        for neighbor_id, dist in neighbors:
+            walk_time = dist / WALK_SPEED_M_S
+            attrs = {
+                "mode": "walk",
+                "transit": False,
+                "time_s": walk_time,
+                "time": walk_time,
+                "distance_m": dist,
+                "route_id": None,
+                "trip_id": None,
+            }
+            self.G.add_edge(node_id, neighbor_id, **attrs)
+            self.G.add_edge(neighbor_id, node_id, **attrs)
+
+        return node_id
 
     def _compute_route_headways(self):
         self.route_headways = {}
@@ -444,7 +510,7 @@ class MultimodalGraph:
         if self.fare_attributes.empty:
             return 0.0
         candidate_ids = set()
-        zones_set = {z for z in zones_passed if z}
+        zones_set = {str(z) for z in zones_passed if z is not None}
         routes_plain = {route_id for _, route_id in routes_used if route_id}
 
         if not self.fare_rules.empty:
@@ -457,13 +523,13 @@ class MultimodalGraph:
                 destination_id = rule.get("destination_id")
                 contains_id = rule.get("contains_id")
 
-                if route_id and routes_plain and str(route_id) not in routes_plain:
+                if pd.notna(route_id) and routes_plain and str(route_id) not in routes_plain:
                     continue
-                if origin_id and origin_zone and str(origin_zone) != str(origin_id):
+                if pd.notna(origin_id) and origin_zone and str(origin_zone) != str(origin_id):
                     continue
-                if destination_id and dest_zone and str(dest_zone) != str(destination_id):
+                if pd.notna(destination_id) and dest_zone and str(dest_zone) != str(destination_id):
                     continue
-                if contains_id and contains_id not in zones_set:
+                if pd.notna(contains_id) and str(contains_id) not in zones_set:
                     continue
                 candidate_ids.add(str(fare_id))
 
