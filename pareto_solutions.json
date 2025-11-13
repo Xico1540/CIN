@@ -1,49 +1,35 @@
 [
   {
     "path": [
-      "ORIGIN_VIRT",
-      "STCP_TRD3",
-      "METRO_5726",
-      "METRO_5770",
-      "METRO_5775",
-      "METRO_5768",
-      "METRO_5777",
-      "METRO_5776",
-      "STCP_FEP2",
-      "STCP_FEUP2",
-      "DEST_VIRT"
+      "METRO_5791",
+      "METRO_5772",
+      "METRO_5776"
     ],
-    "time_s": 1309.6414085425604,
-    "emissions_g": 118.24659048131383,
-    "walk_m": 1113.202197311697,
+    "time_s": 274.49698189134807,
+    "emissions_g": 43.041608271254724,
+    "walk_m": 0.0,
     "fare_cost": 1.4,
+    "fare_selected": {
+      "fare_id": "Z2",
+      "price": 1.4,
+      "currency": "EUR",
+      "source": "gtfs"
+    },
     "n_transfers": 0,
+    "wait_s_total": 34.496981891348085,
+    "waits": {
+      "D": 34.496981891348085
+    },
+    "distance_km_by_mode": {
+      "metro": 1.0760402067813681
+    },
     "zones_passed": [
-      "PRT1",
       "PRT3"
     ],
     "segments": [
       {
-        "from_stop": "ORIGIN_VIRT",
-        "to_stop": "STCP_TRD3",
-        "mode": "walk",
-        "route_id": null,
-        "time_s": 85.82057856353967,
-        "distance_m": 120.14880998895552,
-        "transit": false
-      },
-      {
-        "from_stop": "STCP_TRD3",
-        "to_stop": "METRO_5726",
-        "mode": "walk",
-        "route_id": null,
-        "time_s": 100.06959198045027,
-        "distance_m": 140.09742877263037,
-        "transit": false
-      },
-      {
-        "from_stop": "METRO_5726",
-        "to_stop": "METRO_5726",
+        "from_stop": "METRO_5791",
+        "to_stop": "METRO_5791",
         "mode": "wait",
         "route_id": "D",
         "time_s": 34.496981891348085,
@@ -51,500 +37,96 @@
         "transit": false
       },
       {
-        "from_stop": "METRO_5726",
-        "to_stop": "METRO_5770",
-        "mode": "metro",
-        "route_id": "D",
-        "time_s": 120.0,
-        "distance_m": 549.4621929944065,
-        "transit": true
-      },
-      {
-        "from_stop": "METRO_5770",
-        "to_stop": "METRO_5775",
-        "mode": "metro",
-        "route_id": "D",
-        "time_s": 120.0,
-        "distance_m": 595.1581738280249,
-        "transit": true
-      },
-      {
-        "from_stop": "METRO_5775",
-        "to_stop": "METRO_5768",
+        "from_stop": "METRO_5791",
+        "to_stop": "METRO_5772",
         "mode": "metro",
         "route_id": "D",
         "time_s": 60.0,
-        "distance_m": 672.6235557027935,
+        "distance_m": 293.92586581898735,
         "transit": true
       },
       {
-        "from_stop": "METRO_5768",
-        "to_stop": "METRO_5777",
-        "mode": "metro",
-        "route_id": "D",
-        "time_s": 60.0,
-        "distance_m": 488.70807235072897,
-        "transit": true
-      },
-      {
-        "from_stop": "METRO_5777",
+        "from_stop": "METRO_5772",
         "to_stop": "METRO_5776",
         "mode": "metro",
         "route_id": "D",
-        "time_s": 120.0,
-        "distance_m": 650.2127671568921,
+        "time_s": 180.0,
+        "distance_m": 782.1143409623808,
         "transit": true
-      },
-      {
-        "from_stop": "METRO_5776",
-        "to_stop": "STCP_FEP2",
-        "mode": "walk",
-        "route_id": null,
-        "time_s": 265.1816586496452,
-        "distance_m": 371.2543221095033,
-        "transit": false
-      },
-      {
-        "from_stop": "STCP_FEP2",
-        "to_stop": "STCP_FEUP2",
-        "mode": "walk",
-        "route_id": null,
-        "time_s": 239.74247496411007,
-        "distance_m": 335.6394649497541,
-        "transit": false
-      },
-      {
-        "from_stop": "STCP_FEUP2",
-        "to_stop": "DEST_VIRT",
-        "mode": "walk",
-        "route_id": null,
-        "time_s": 104.33012249346697,
-        "distance_m": 146.06217149085376,
-        "transit": false
       }
     ],
-    "has_walk": true
+    "has_walk": false
   },
   {
     "path": [
-      "ORIGIN_VIRT",
-      "STCP_TRD3",
-      "METRO_5726",
-      "METRO_5770",
-      "METRO_5775",
-      "METRO_5768",
-      "METRO_5777",
-      "STCP_OUTE3",
-      "STCP_MLAR1",
-      "STCP_FEP2",
-      "STCP_FEUP2",
-      "DEST_VIRT"
+      "METRO_5791",
+      "STCP_IPO2",
+      "METRO_5772",
+      "STCP_ESS1",
+      "STCP_DSS",
+      "METRO_5776"
     ],
-    "time_s": 1246.1479706641499,
-    "emissions_g": 160.73333007661225,
-    "walk_m": 915.8442173025604,
+    "time_s": 994.6069663679435,
+    "emissions_g": 0.0,
+    "walk_m": 1392.4497529151208,
     "fare_cost": 1.4,
-    "n_transfers": 1,
-    "zones_passed": [
-      "PRT1",
-      "PRT3"
-    ],
+    "fare_selected": {
+      "fare_id": "Z2",
+      "price": 1.4,
+      "currency": "EUR",
+      "source": "gtfs"
+    },
+    "n_transfers": 0,
+    "wait_s_total": 0.0,
+    "waits": {},
+    "distance_km_by_mode": {
+      "walk": 1.392449752915121
+    },
+    "zones_passed": [],
     "segments": [
       {
-        "from_stop": "ORIGIN_VIRT",
-        "to_stop": "STCP_TRD3",
+        "from_stop": "METRO_5791",
+        "to_stop": "STCP_IPO2",
         "mode": "walk",
         "route_id": null,
-        "time_s": 85.82057856353967,
-        "distance_m": 120.14880998895552,
+        "time_s": 89.94047045277942,
+        "distance_m": 125.91665863389119,
         "transit": false
       },
       {
-        "from_stop": "STCP_TRD3",
-        "to_stop": "METRO_5726",
+        "from_stop": "STCP_IPO2",
+        "to_stop": "METRO_5772",
         "mode": "walk",
         "route_id": null,
-        "time_s": 100.06959198045027,
-        "distance_m": 140.09742877263037,
+        "time_s": 180.55424457048093,
+        "distance_m": 252.7759423986733,
         "transit": false
       },
       {
-        "from_stop": "METRO_5726",
-        "to_stop": "METRO_5726",
-        "mode": "wait",
-        "route_id": "D",
-        "time_s": 34.496981891348085,
-        "distance_m": 0.0,
-        "transit": false
-      },
-      {
-        "from_stop": "METRO_5726",
-        "to_stop": "METRO_5770",
-        "mode": "metro",
-        "route_id": "D",
-        "time_s": 120.0,
-        "distance_m": 549.4621929944065,
-        "transit": true
-      },
-      {
-        "from_stop": "METRO_5770",
-        "to_stop": "METRO_5775",
-        "mode": "metro",
-        "route_id": "D",
-        "time_s": 120.0,
-        "distance_m": 595.1581738280249,
-        "transit": true
-      },
-      {
-        "from_stop": "METRO_5775",
-        "to_stop": "METRO_5768",
-        "mode": "metro",
-        "route_id": "D",
-        "time_s": 60.0,
-        "distance_m": 672.6235557027935,
-        "transit": true
-      },
-      {
-        "from_stop": "METRO_5768",
-        "to_stop": "METRO_5777",
-        "mode": "metro",
-        "route_id": "D",
-        "time_s": 60.0,
-        "distance_m": 488.70807235072897,
-        "transit": true
-      },
-      {
-        "from_stop": "METRO_5777",
-        "to_stop": "STCP_OUTE3",
+        "from_stop": "METRO_5772",
+        "to_stop": "STCP_ESS1",
         "mode": "walk",
         "route_id": null,
-        "time_s": 124.21167292883334,
-        "distance_m": 173.89634210036667,
+        "time_s": 269.0987988460796,
+        "distance_m": 376.7383183845114,
         "transit": false
       },
       {
-        "from_stop": "STCP_OUTE3",
-        "to_stop": "STCP_OUTE3",
-        "mode": "wait",
-        "route_id": "404",
-        "time_s": 62.4765478424015,
-        "distance_m": 0.0,
-        "transit": false
-      },
-      {
-        "from_stop": "STCP_OUTE3",
-        "to_stop": "STCP_MLAR1",
-        "mode": "stcp",
-        "route_id": "404",
-        "time_s": 59.0,
-        "distance_m": 266.113469444036,
-        "transit": true
-      },
-      {
-        "from_stop": "STCP_MLAR1",
-        "to_stop": "STCP_FEP2",
-        "mode": "stcp",
-        "route_id": "404",
-        "time_s": 76.0,
-        "distance_m": 357.1372155566381,
-        "transit": true
-      },
-      {
-        "from_stop": "STCP_FEP2",
-        "to_stop": "STCP_FEUP2",
+        "from_stop": "STCP_ESS1",
+        "to_stop": "STCP_DSS",
         "mode": "walk",
         "route_id": null,
-        "time_s": 239.74247496411007,
-        "distance_m": 335.6394649497541,
+        "time_s": 253.38775772802907,
+        "distance_m": 354.74286081924066,
         "transit": false
       },
       {
-        "from_stop": "STCP_FEUP2",
-        "to_stop": "DEST_VIRT",
-        "mode": "walk",
-        "route_id": null,
-        "time_s": 104.33012249346697,
-        "distance_m": 146.06217149085376,
-        "transit": false
-      }
-    ],
-    "has_walk": true
-  },
-  {
-    "path": [
-      "ORIGIN_VIRT",
-      "STCP_TRD3",
-      "METRO_5726",
-      "METRO_5770",
-      "METRO_5775",
-      "METRO_5768",
-      "METRO_5777",
-      "METRO_5776",
-      "STCP_FEP2",
-      "STCP_FEUP1",
-      "DEST_VIRT"
-    ],
-    "time_s": 1280.3747020608687,
-    "emissions_g": 158.5579731185716,
-    "walk_m": 783.2743527917844,
-    "fare_cost": 1.4,
-    "n_transfers": 1,
-    "zones_passed": [
-      "PRT1",
-      "PRT3"
-    ],
-    "segments": [
-      {
-        "from_stop": "ORIGIN_VIRT",
-        "to_stop": "STCP_TRD3",
-        "mode": "walk",
-        "route_id": null,
-        "time_s": 85.82057856353967,
-        "distance_m": 120.14880998895552,
-        "transit": false
-      },
-      {
-        "from_stop": "STCP_TRD3",
-        "to_stop": "METRO_5726",
-        "mode": "walk",
-        "route_id": null,
-        "time_s": 100.06959198045027,
-        "distance_m": 140.09742877263037,
-        "transit": false
-      },
-      {
-        "from_stop": "METRO_5726",
-        "to_stop": "METRO_5726",
-        "mode": "wait",
-        "route_id": "D",
-        "time_s": 34.496981891348085,
-        "distance_m": 0.0,
-        "transit": false
-      },
-      {
-        "from_stop": "METRO_5726",
-        "to_stop": "METRO_5770",
-        "mode": "metro",
-        "route_id": "D",
-        "time_s": 120.0,
-        "distance_m": 549.4621929944065,
-        "transit": true
-      },
-      {
-        "from_stop": "METRO_5770",
-        "to_stop": "METRO_5775",
-        "mode": "metro",
-        "route_id": "D",
-        "time_s": 120.0,
-        "distance_m": 595.1581738280249,
-        "transit": true
-      },
-      {
-        "from_stop": "METRO_5775",
-        "to_stop": "METRO_5768",
-        "mode": "metro",
-        "route_id": "D",
-        "time_s": 60.0,
-        "distance_m": 672.6235557027935,
-        "transit": true
-      },
-      {
-        "from_stop": "METRO_5768",
-        "to_stop": "METRO_5777",
-        "mode": "metro",
-        "route_id": "D",
-        "time_s": 60.0,
-        "distance_m": 488.70807235072897,
-        "transit": true
-      },
-      {
-        "from_stop": "METRO_5777",
+        "from_stop": "STCP_DSS",
         "to_stop": "METRO_5776",
-        "mode": "metro",
-        "route_id": "D",
-        "time_s": 120.0,
-        "distance_m": 650.2127671568921,
-        "transit": true
-      },
-      {
-        "from_stop": "METRO_5776",
-        "to_stop": "STCP_FEP2",
         "mode": "walk",
         "route_id": null,
-        "time_s": 265.1816586496452,
-        "distance_m": 371.2543221095033,
-        "transit": false
-      },
-      {
-        "from_stop": "STCP_FEP2",
-        "to_stop": "STCP_FEP2",
-        "mode": "wait",
-        "route_id": "803",
-        "time_s": 110.39603960396039,
-        "distance_m": 0.0,
-        "transit": false
-      },
-      {
-        "from_stop": "STCP_FEP2",
-        "to_stop": "STCP_FEUP1",
-        "mode": "stcp",
-        "route_id": "803",
-        "time_s": 96.0,
-        "distance_m": 366.8005699477503,
-        "transit": true
-      },
-      {
-        "from_stop": "STCP_FEUP1",
-        "to_stop": "DEST_VIRT",
-        "mode": "walk",
-        "route_id": null,
-        "time_s": 108.40985137192511,
-        "distance_m": 151.77379192069515,
-        "transit": false
-      }
-    ],
-    "has_walk": true
-  },
-  {
-    "path": [
-      "ORIGIN_VIRT",
-      "STCP_1AL3",
-      "STCP_TRD1",
-      "METRO_5726",
-      "METRO_5770",
-      "METRO_5775",
-      "METRO_5768",
-      "METRO_5777",
-      "METRO_5776",
-      "STCP_FEP2",
-      "STCP_FEUP2",
-      "DEST_VIRT"
-    ],
-    "time_s": 1299.4179593286003,
-    "emissions_g": 143.04154566359287,
-    "walk_m": 941.2208498936344,
-    "fare_cost": 1.4,
-    "n_transfers": 1,
-    "zones_passed": [
-      "PRT1",
-      "PRT3"
-    ],
-    "segments": [
-      {
-        "from_stop": "ORIGIN_VIRT",
-        "to_stop": "STCP_1AL3",
-        "mode": "walk",
-        "route_id": null,
-        "time_s": 18.626614594720635,
-        "distance_m": 26.077260432608888,
-        "transit": false
-      },
-      {
-        "from_stop": "STCP_1AL3",
-        "to_stop": "STCP_1AL3",
-        "mode": "wait",
-        "route_id": "200",
-        "time_s": 51.620370370370374,
-        "distance_m": 0.0,
-        "transit": false
-      },
-      {
-        "from_stop": "STCP_1AL3",
-        "to_stop": "STCP_TRD1",
-        "mode": "stcp",
-        "route_id": "200",
-        "time_s": 61.0,
-        "distance_m": 225.61378691791646,
-        "transit": true
-      },
-      {
-        "from_stop": "STCP_TRD1",
-        "to_stop": "METRO_5726",
-        "mode": "walk",
-        "route_id": null,
-        "time_s": 44.4197363649389,
-        "distance_m": 62.18763091091445,
-        "transit": false
-      },
-      {
-        "from_stop": "METRO_5726",
-        "to_stop": "METRO_5726",
-        "mode": "wait",
-        "route_id": "D",
-        "time_s": 34.496981891348085,
-        "distance_m": 0.0,
-        "transit": false
-      },
-      {
-        "from_stop": "METRO_5726",
-        "to_stop": "METRO_5770",
-        "mode": "metro",
-        "route_id": "D",
-        "time_s": 120.0,
-        "distance_m": 549.4621929944065,
-        "transit": true
-      },
-      {
-        "from_stop": "METRO_5770",
-        "to_stop": "METRO_5775",
-        "mode": "metro",
-        "route_id": "D",
-        "time_s": 120.0,
-        "distance_m": 595.1581738280249,
-        "transit": true
-      },
-      {
-        "from_stop": "METRO_5775",
-        "to_stop": "METRO_5768",
-        "mode": "metro",
-        "route_id": "D",
-        "time_s": 60.0,
-        "distance_m": 672.6235557027935,
-        "transit": true
-      },
-      {
-        "from_stop": "METRO_5768",
-        "to_stop": "METRO_5777",
-        "mode": "metro",
-        "route_id": "D",
-        "time_s": 60.0,
-        "distance_m": 488.70807235072897,
-        "transit": true
-      },
-      {
-        "from_stop": "METRO_5777",
-        "to_stop": "METRO_5776",
-        "mode": "metro",
-        "route_id": "D",
-        "time_s": 120.0,
-        "distance_m": 650.2127671568921,
-        "transit": true
-      },
-      {
-        "from_stop": "METRO_5776",
-        "to_stop": "STCP_FEP2",
-        "mode": "walk",
-        "route_id": null,
-        "time_s": 265.1816586496452,
-        "distance_m": 371.2543221095033,
-        "transit": false
-      },
-      {
-        "from_stop": "STCP_FEP2",
-        "to_stop": "STCP_FEUP2",
-        "mode": "walk",
-        "route_id": null,
-        "time_s": 239.74247496411007,
-        "distance_m": 335.6394649497541,
-        "transit": false
-      },
-      {
-        "from_stop": "STCP_FEUP2",
-        "to_stop": "DEST_VIRT",
-        "mode": "walk",
-        "route_id": null,
-        "time_s": 104.33012249346697,
-        "distance_m": 146.06217149085376,
+        "time_s": 201.62569477057454,
+        "distance_m": 282.27597267880435,
         "transit": false
       }
     ],

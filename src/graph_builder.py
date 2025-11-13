@@ -1,17 +1,22 @@
+import difflib
 import math
 import re
+import unicodedata
 from typing import Dict, Iterable, List, Optional, Tuple
 
 import networkx as nx
 import pandas as pd
 
+from constants import (
+    EMISSION_METRO_G_PER_KM,
+    EMISSION_STCP_G_PER_KM,
+    PENALTY,
+    WALK_SPEED_M_S,
+)
+
 WALK_RADIUS_METERS = 400
-WALK_SPEED_M_S = 1.4  # ~5 km/h average walking
 METRO_CRUISE_SPEED_KMH = 40.0
 STCP_CRUISE_SPEED_KMH = 30.0
-EMISSION_METRO_G_PER_KM = 40.0
-EMISSION_STCP_G_PER_KM = 109.9
-PENALTY = 1e9
 
 
 def to_seconds(hms: str) -> int:
@@ -32,6 +37,13 @@ def _fallback_speed(mode: str) -> float:
     if mode == "metro":
         return METRO_CRUISE_SPEED_KMH * 1000 / 3600
     return STCP_CRUISE_SPEED_KMH * 1000 / 3600
+
+
+def _normalize_text(value: str) -> str:
+    if value is None:
+        return ""
+    normalized = unicodedata.normalize("NFKD", str(value))
+    return "".join(ch for ch in normalized if not unicodedata.combining(ch)).lower()
 
 
 class MultimodalGraph:
@@ -76,12 +88,15 @@ class MultimodalGraph:
         df["mode"] = mode
         df["prefix"] = prefix
         df["stop_id"] = df["stop_id"].astype(str)
+        if "stop_name" not in df.columns:
+            df["stop_name"] = None
+        df["stop_name"] = df["stop_name"].fillna("").astype(str)
         if "zone_id" not in df.columns:
             df["zone_id"] = None
         df["node_id"] = df.apply(lambda r: f"{prefix}_{r['stop_id']}", axis=1)
         for _, row in df.iterrows():
             self.node_lookup[(mode, row["stop_id"])] = row["node_id"]
-        return df[["node_id", "stop_id", "mode", "prefix", "zone_id", "stop_lat", "stop_lon"]]
+        return df[["node_id", "stop_id", "stop_name", "mode", "prefix", "zone_id", "stop_lat", "stop_lon"]]
 
     def _build_nodes(self):
         frames = []
@@ -100,6 +115,7 @@ class MultimodalGraph:
                 zone_id=row.get("zone_id"),
                 stop_id=row["stop_id"],
                 prefix=row["prefix"],
+                stop_name=row.get("stop_name"),
             )
 
     def _build_edges(self):
@@ -371,12 +387,71 @@ class MultimodalGraph:
             return None
         return path
 
+    def search_stops_by_name(self, query: str, max_results: Optional[int] = None):
+        """
+        Procura paragens cujo nome corresponda (total ou parcialmente) a `query`.
+
+        Retorna uma lista de dicionários com `node_id`, `name`, `mode` e `degree`,
+        ordenada por correspondência exacta, prioridade de modo e grau (desc).
+        """
+        if not query:
+            return []
+        q = str(query).strip().lower()
+        q_norm = _normalize_text(query)
+        results: List[dict] = []
+        for node_id, data in self.G.nodes(data=True):
+            name = data.get("stop_name")
+            if not name:
+                continue
+            lowered = str(name).lower()
+            normalized = _normalize_text(name)
+            if lowered == q or (q_norm and normalized == q_norm):
+                match_type = 0
+            elif (q and q in lowered) or (q_norm and q_norm in normalized):
+                match_type = 1
+            elif q_norm:
+                ratio = difflib.SequenceMatcher(None, normalized, q_norm).ratio()
+                if ratio < 0.6:
+                    continue
+                match_type = 2
+            else:
+                continue
+            mode = data.get("mode")
+            mode_priority = {"metro": 0, "stcp": 1}.get(mode, 2)
+            degree = self.G.degree(node_id)
+            results.append(
+                {
+                    "node_id": node_id,
+                    "name": name,
+                    "mode": mode,
+                    "degree": degree,
+                    "match_priority": match_type,
+                    "mode_priority": mode_priority,
+                }
+            )
+
+        results.sort(
+            key=lambda item: (
+                item["match_priority"],
+                item["mode_priority"],
+                -item["degree"],
+                item["name"],
+            )
+        )
+        if max_results is not None:
+            return results[:max_results]
+        return results
+
     def path_metrics(self, path: Iterable[str]):
         self._ensure_state_compatibility()
+        from collections import defaultdict
+
         total_travel_time = 0.0
         waiting_time = 0.0
         total_emissions = 0.0
         walking_distance = 0.0
+        waits_by_route = defaultdict(float)
+        distance_km_by_mode = defaultdict(float)
         routes_used: set[Tuple[str, str]] = set()
         segments: List[dict] = []
         zones_passed: List[str] = []
@@ -387,7 +462,6 @@ class MultimodalGraph:
 
         prev_transit_route: Optional[Tuple[str, str]] = None
         prev_block: Optional[Tuple[str, str, str]] = None
-        last_edge_was_transit = False
         transfers = 0
 
         nodes = list(path)
@@ -402,7 +476,6 @@ class MultimodalGraph:
                 return self._penalised_metrics()
 
         for u, v in zip(nodes[:-1], nodes[1:]):
-            prev_route_before_block = prev_transit_route
             if not self.G.has_edge(u, v):
                 return self._penalised_metrics()
             data = self.G[u][v]
@@ -418,7 +491,6 @@ class MultimodalGraph:
             block_key = (mode, route_id_str, str(trip_id)) if is_transit else None
             route_key = (mode, route_id_str)
 
-            added_wait = False
             if is_transit and block_key != prev_block:
                 headway = None
                 if route_id_str:
@@ -427,6 +499,8 @@ class MultimodalGraph:
                         headway = self.route_headways.get((mode, route_id_str))
                 if headway:
                     wait_s = 0.5 * headway
+                    route_wait_key = route_id_str or "unknown"
+                    waits_by_route[route_wait_key] += wait_s
                     segments.append(
                         {
                             "from_stop": u,
@@ -439,7 +513,6 @@ class MultimodalGraph:
                         }
                     )
                     waiting_time += wait_s
-                    added_wait = True
                 if prev_transit_route is not None and route_key != prev_transit_route:
                     transfers += 1
                 prev_block = block_key
@@ -460,8 +533,8 @@ class MultimodalGraph:
                 routes_used.add(route_key)
                 emission_factor = EMISSION_METRO_G_PER_KM if mode == "metro" else EMISSION_STCP_G_PER_KM
                 total_emissions += (distance_m / 1000.0) * emission_factor
+                distance_km_by_mode[mode] += distance_m / 1000.0
                 prev_transit_route = route_key
-                last_edge_was_transit = True
 
                 zone_u = self.G.nodes[u].get("zone_id")
                 zone_v = self.G.nodes[v].get("zone_id")
@@ -469,20 +542,29 @@ class MultimodalGraph:
                 _push_zone(zone_v)
             else:
                 walking_distance += distance_m
+                distance_km_by_mode[mode] += distance_m / 1000.0
                 prev_block = None
-                last_edge_was_transit = False
 
-        fare_cost = self._estimate_fare(zones_passed, origin_zone, dest_zone, routes_used)
+        fare_cost, fare_selected = self._estimate_fare(
+            zones_passed,
+            origin_zone,
+            dest_zone,
+            routes_used,
+        )
         metrics = {
             "time_total_s": total_travel_time + waiting_time,
             "travel_time_s": total_travel_time,
             "waiting_time_s": waiting_time,
+            "wait_s_total": waiting_time,
             "emissions_g": total_emissions,
             "walk_m": walking_distance,
             "fare_cost": fare_cost,
+            "fare_selected": fare_selected,
             "n_transfers": transfers,
             "zones_passed": zones_passed,
             "segments": segments,
+            "waits": dict(waits_by_route),
+            "distance_km_by_mode": dict(distance_km_by_mode),
         }
         return metrics
 
@@ -491,12 +573,16 @@ class MultimodalGraph:
             "time_total_s": PENALTY,
             "travel_time_s": PENALTY,
             "waiting_time_s": PENALTY,
+            "wait_s_total": PENALTY,
             "emissions_g": PENALTY,
             "walk_m": PENALTY,
             "fare_cost": PENALTY,
+            "fare_selected": None,
             "n_transfers": PENALTY,
             "zones_passed": [],
             "segments": [],
+            "waits": {},
+            "distance_km_by_mode": {},
         }
 
     def _estimate_fare(
@@ -505,10 +591,10 @@ class MultimodalGraph:
         origin_zone: Optional[str],
         dest_zone: Optional[str],
         routes_used: Iterable[Tuple[str, str]],
-    ) -> float:
+    ) -> Tuple[float, Optional[dict]]:
         self._ensure_state_compatibility()
         if self.fare_attributes.empty:
-            return 0.0
+            return 0.0, None
         candidate_ids = set()
         zones_set = {str(z) for z in zones_passed if z is not None}
         routes_plain = {route_id for _, route_id in routes_used if route_id}
@@ -553,7 +639,27 @@ class MultimodalGraph:
                     price = row.get("price")
                     if pd.notna(price):
                         best_price = price if best_price is None else min(best_price, price)
-            return float(best_price) if best_price is not None else 0.0
+            if best_price is None:
+                return 0.0, None
+            return float(best_price), {
+                "fare_id": None,
+                "price": float(best_price),
+                "currency": "EUR",
+                "source": "fallback",
+            }
 
-        price = fares["price"].dropna().astype(float).min()
-        return float(price) if pd.notna(price) else 0.0
+        fares = fares.dropna(subset=["price"])
+        if fares.empty:
+            return 0.0, None
+        idx = fares["price"].astype(float).idxmin()
+        row = fares.loc[idx]
+        price = float(row.get("price", 0.0))
+        currency = row.get("currency_type")
+        currency = str(currency) if pd.notna(currency) else "EUR"
+        fare_info = {
+            "fare_id": str(row.get("fare_id")) if pd.notna(row.get("fare_id")) else None,
+            "price": price,
+            "currency": currency,
+            "source": "gtfs",
+        }
+        return price, fare_info

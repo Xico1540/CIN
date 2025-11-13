@@ -7,10 +7,7 @@ from __future__ import annotations
 import os
 from typing import Iterable, Tuple
 
-PENALTY = 1e9
-
-EMISSION_METRO_G_PER_KM = 40.0
-EMISSION_STCP_G_PER_KM = 109.9
+from constants import EMISSION_METRO_G_PER_KM, EMISSION_STCP_G_PER_KM, PENALTY
 
 WALK_POLICY_MAXIMIZE = "maximize"
 WALK_POLICY_MINIMIZE = "minimize"

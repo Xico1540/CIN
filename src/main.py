@@ -1,6 +1,7 @@
 import argparse
 import os
 import pickle
+from typing import Optional
 from loader import load_system, PREFIX_METRO, PREFIX_STCP
 from graph_builder import MultimodalGraph
 from evolution import PENALTY, run_nsga2
@@ -29,7 +30,8 @@ def _parse_point(value):
     return None
 
 # python
-def run_example(origin, dest, metro_folder=None, stcp_folder=None,
+def run_example(origin=None, dest=None, origin_name=None, dest_name=None,
+                metro_folder=None, stcp_folder=None,
                 walk_radius=400, pop_size=50, generations=30,
                 wmax_s=None, tmax=None, walk_policy=None, include_cost=False):
 
@@ -91,8 +93,37 @@ def run_example(origin, dest, metro_folder=None, stcp_folder=None,
             return node_id
         return resolve_node(value)
 
-    origin_node = resolve_with_virtual(origin, "ORIGIN")
-    dest_node = resolve_with_virtual(dest, "DEST")
+    def resolve_stop_name(name: Optional[str], label: str) -> str:
+        if not name:
+            raise ValueError(f"Nome de paragem vazio para {label}")
+        if not hasattr(G, "search_stops_by_name"):
+            raise ValueError("Grafo não suporta pesquisa por nome de paragem. Recrie o cache com --no-cache.")
+        matches = G.search_stops_by_name(name)
+        if not matches:
+            raise ValueError(f"Nenhuma paragem encontrada para '{name}'.")
+        chosen = matches[0]
+        if len(matches) > 1:
+            preview_matches = ", ".join(
+                f"{m['name']} [{m['node_id']}]" for m in matches[1:5]
+            )
+            print(f"[info] {label}: múltiplas correspondências para '{name}', a escolher {chosen['name']} [{chosen['node_id']}].")
+            if preview_matches:
+                print(f"[info] Outras correspondências: {preview_matches}")
+        else:
+            print(f"[info] {label}: '{name}' → {chosen['name']} [{chosen['node_id']}]")
+        return chosen["node_id"]
+
+    def resolve_input(stop_value, stop_name, label):
+        if stop_value is not None:
+            return resolve_with_virtual(stop_value, label)
+        if stop_name:
+            node_id = resolve_stop_name(stop_name, label)
+            nodes.add(node_id)
+            return node_id
+        raise ValueError(f"É necessário indicar {label.lower()} via ID/coords ou nome.")
+
+    origin_node = resolve_input(origin, origin_name, "ORIGIN")
+    dest_node = resolve_input(dest, dest_name, "DEST")
 
     print(f"Origin resolved: {origin_node}, Destination resolved: {dest_node}")
     print("Running NSGA-II...")
@@ -128,7 +159,11 @@ def run_example(origin, dest, metro_folder=None, stcp_folder=None,
             "emissions_g": metrics.get("emissions_g"),
             "walk_m": metrics.get("walk_m"),
             "fare_cost": metrics.get("fare_cost"),
+            "fare_selected": metrics.get("fare_selected"),
             "n_transfers": metrics.get("n_transfers"),
+            "wait_s_total": metrics.get("wait_s_total"),
+            "waits": metrics.get("waits"),
+            "distance_km_by_mode": metrics.get("distance_km_by_mode"),
             "zones_passed": metrics.get("zones_passed"),
             "segments": segs,
             "has_walk": any(seg.get("mode") == "walk" for seg in segs),
@@ -143,8 +178,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--metro", default=None, help="Path to Metro GTFS folder")
     parser.add_argument("--stcp", default=None, help="Path to STCP GTFS folder")
-    parser.add_argument("--origin", required=True, help="Origin stop ID")
-    parser.add_argument("--dest", required=True, help="Destination stop ID")
+    parser.add_argument("--origin", default=None, help="Origin stop ID")
+    parser.add_argument("--dest", default=None, help="Destination stop ID")
+    parser.add_argument("--origin-name", default=None,
+                        help="Nome da paragem de origem (substitui --origin se usado).")
+    parser.add_argument("--dest-name", default=None,
+                        help="Nome da paragem de destino (substitui --dest se usado).")
     parser.add_argument("--walk-radius", type=int, default=400, help="Walking radius in meters")
     parser.add_argument("--pop-size", type=int, default=50, help="Population size")
     parser.add_argument("--gens", type=int, default=30, help="Number of generations")
@@ -158,7 +197,15 @@ if __name__ == "__main__":
                         help="Adicionar custo como quarto objetivo na otimização.")
     args = parser.parse_args()
 
-    run_example(args.origin, args.dest,
+    if not args.origin and not args.origin_name:
+        parser.error("É obrigatório indicar origem (--origin ou --origin-name).")
+    if not args.dest and not args.dest_name:
+        parser.error("É obrigatório indicar destino (--dest ou --dest-name).")
+
+    run_example(origin=args.origin,
+                dest=args.dest,
+                origin_name=args.origin_name,
+                dest_name=args.dest_name,
                 metro_folder=args.metro, stcp_folder=args.stcp,
                 walk_radius=args.walk_radius,
                 pop_size=args.pop_size,

@@ -2,11 +2,8 @@ import random
 from typing import Iterable, List, Sequence
 
 from deap import base, creator, tools
-from fitness import (
-    EMISSION_METRO_G_PER_KM,
-    EMISSION_STCP_G_PER_KM,
-    fitness_from_metrics,
-)
+from constants import EMISSION_METRO_G_PER_KM, EMISSION_STCP_G_PER_KM
+from fitness import fitness_from_metrics
 
 PENALTY = 1e9
 TIME_NORM_FACTOR = 3600.0  # normalização heurística (1 hora)

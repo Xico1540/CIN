@@ -68,23 +68,23 @@
 **Porque:** o enunciado sugere criar cenários e comparar com seeds/heurísticas (tipo MOEA/D).
 
 ### Subtarefas
-- [ ] **Gerador de O-D**:
-  - [ ] Função `generate_scenarios(G, n=10, types=("short","mid","long"))`:
-    - [ ] Para cada tipo, selecionar pares O-D por **`random_walk`** com comprimentos alvo (ex.: 1–3 arestas curto, 6–10 médio, 12+ longo).
-    - [ ] Garantir acessibilidade (existência de caminho).
-- [ ] **Baseline Dijkstra-λ**:
-  - [ ] Para cada λ ∈ {0.0, 0.05, …, 1.0}, peso `w = λ·tempo_norm + (1-λ)·emissões_norm`.
-  - [ ] Guardar soluções do baseline em `baseline_pareto.json` (por cenário).
-- [ ] **Runner**:
-  - [ ] Em `main.py` (flag `--scenarios N`) **ou** criar `experiments.py`:
-    - [ ] Para cada cenário: correr NSGA-II e baseline; guardar `pareto_solutions.json` e `baseline_pareto.json`.
+- [x] **Gerador de O-D**:
+  - [x] Função `generate_scenarios(G, n=10, types=("short","mid","long"))`:
+    - [x] Para cada tipo, selecionar pares O-D por **`random_walk`** com comprimentos alvo (ex.: 1–3 arestas curto, 6–10 médio, 12+ longo).
+    - [x] Garantir acessibilidade (existência de caminho).
+- [x] **Baseline Dijkstra-λ**:
+  - [x] Para cada λ ∈ {0.0, 0.05, …, 1.0}, peso `w = λ·tempo_norm + (1-λ)·emissões_norm`.
+  - [x] Guardar soluções do baseline em `baseline_pareto.json` (por cenário).
+- [x] **Runner**:
+  - [x] Em `main.py` (flag `--scenarios N`) **ou** criar `experiments.py`:
+    - [x] Para cada cenário: correr NSGA-II e baseline; guardar `pareto_solutions.json` e `baseline_pareto.json`.
 
 ### Critérios de aceitação
 - Existem ficheiros `baseline_pareto.json` por cenário com 21 soluções (uma por λ).
 - Comparando NSGA-II vs baseline, vê-se diversidade superior do NSGA-II (mais pontos não dominados).
 
 ### Testes rápidos
-- [ ] 3 cenários (curto, médio, longo) → todos geram JSONs sem erro.
+- [x] 3 cenários (curto, médio, longo) → todos geram JSONs sem erro.
 - [ ] Contar quantos pontos do baseline são dominados pelo NSGA-II (espera-se >50% dominados).
 
 ---
@@ -94,23 +94,23 @@
 **Porque:** facilita análise e apresentação.
 
 ### Subtarefas
-- [ ] **`main.py`** — ao construir a solução:
-  - [ ] Calcular `wait_s_total = sum(seg.time_s where seg.mode=="wait")`.
-  - [ ] `waits`: dicionário por `route_id` com a soma de espera (converter em lista de objetos para JSON).
-  - [ ] (Opcional) `distance_km_by_mode`: somas por `mode` (metro, stcp, walk).
-- [ ] **`graph_builder._estimate_fare`**:
-  - [ ] Se tiveres `fare_id`/`currency_type`, devolver também:
-    - [ ] `fare_selected = {"fare_id":..., "price":..., "currency":"EUR","source":"gtfs|fallback"}`.
-- [ ] **Guardar no JSON**:
-  - [ ] Acrescentar `wait_s_total`, `waits`, (opcional) `distance_km_by_mode` e `fare_selected`.
+- [x] **`main.py`** — ao construir a solução:
+  - [x] Calcular `wait_s_total = sum(seg.time_s where seg.mode=="wait")`.
+  - [x] `waits`: dicionário por `route_id` com a soma de espera (converter em lista de objetos para JSON).
+  - [x] (Opcional) `distance_km_by_mode`: somas por `mode` (metro, stcp, walk).
+- [x] **`graph_builder._estimate_fare`**:
+  - [x] Se tiveres `fare_id`/`currency_type`, devolver também:
+    - [x] `fare_selected = {"fare_id":..., "price":..., "currency":"EUR","source":"gtfs|fallback"}`.
+- [x] **Guardar no JSON**:
+  - [x] Acrescentar `wait_s_total`, `waits`, (opcional) `distance_km_by_mode` e `fare_selected`.
 
 ### Critérios de aceitação
 - `time_s == sum(segments.time_s)` continua a verificar.
 - `wait_s_total == sum(seg.time_s where seg.mode=="wait")`.
 
 ### Testes rápidos
-- [ ] Verificar que para a amostra anterior, `wait_s_total` bate com a soma manual.
-- [ ] Confirmar que `fare_selected` existe quando uma tarifa GTFS é aplicada.
+- [x] Verificar que para a amostra anterior, `wait_s_total` bate com a soma manual.
+- [x] Confirmar que `fare_selected` existe quando uma tarifa GTFS é aplicada.
 
 ---
 
@@ -119,23 +119,23 @@
 **Porque:** ajuda a testar/usar sem decorar IDs.
 
 ### Subtarefas
-- [ ] **`main.py`** — novas flags:
-  - [ ] `--origin-name "Hospital São João"` / `--dest-name "Campanhã"`.
-- [ ] **Resolver pelos `stops.txt`**:
-  - [ ] Carregar `stop_name` para um índice simples (case-insensitive, busca por substring).
-  - [ ] Se houver **uma** correspondência → usar o `stop_id`.
-  - [ ] Se houver várias:
-    - [ ] Escolher a de maior importância (heurística: mais ligações/centralidade) **ou**
-    - [ ] Listar matches no log e escolher a primeira (documentar).
-- [ ] **Prioridade**: se `--origin` (stop_id/latlon) foi passado, ignora `--origin-name` (mesmo para destino).
+- [x] **`main.py`** — novas flags:
+  - [x] `--origin-name "Hospital São João"` / `--dest-name "Campanhã"`.
+- [x] **Resolver pelos `stops.txt`**:
+  - [x] Carregar `stop_name` para um índice simples (case-insensitive, busca por substring).
+  - [x] Se houver **uma** correspondência → usar o `stop_id`.
+  - [x] Se houver várias:
+    - [x] Escolher a de maior importância (heurística: mais ligações/centralidade) **ou**
+    - [x] Listar matches no log e escolher a primeira (documentar).
+- [x] **Prioridade**: se `--origin` (stop_id/latlon) foi passado, ignora `--origin-name` (mesmo para destino).
 
 ### Critérios de aceitação
 - `--origin-name` sozinho já encontra a paragem e gera rotas.
 - Em caso de múltiplas, comportamento é documentado (log + fallback determinístico).
 
 ### Testes rápidos
-- [ ] `--origin-name "São João" --dest-name "Campanhã"` → rota válida.
-- [ ] Caso sem matches → erro claro: “Nenhuma paragem encontrada para ...”.
+- [x] `--origin-name "São João" --dest-name "Campanhã"` → rota válida.
+- [x] Caso sem matches → erro claro: “Nenhuma paragem encontrada para ...”.
 
 ---
 
@@ -144,15 +144,15 @@
 **Porque:** polir o código, evitar duplicação, facilitar manutenção.
 
 ### Subtarefas
-- [ ] **Remover variáveis não usadas** em `graph_builder.path_metrics` (ex.: restos como `last_edge_was_transit`, etc.).
-- [ ] **Constantes de emissões**:
-  - [ ] Criar `constants.py` (ou centralizar em `fitness.py`) com:
+- [x] **Remover variáveis não usadas** em `graph_builder.path_metrics` (ex.: restos como `last_edge_was_transit`, etc.).
+- [x] **Constantes de emissões**:
+  - [x] Criar `constants.py` (ou centralizar em `fitness.py`) com:
     - `EMISSION_METRO_G_PER_KM = 40.0`
     - `EMISSION_STCP_G_PER_KM = 109.9`
     - `WALK_SPEED_M_S = 1.4`
-  - [ ] Importar em `graph_builder.py` e `fitness.py`; remover duplicados locais.
-- [ ] **Consistência de campos**:
-  - [ ] Arestas usam **sempre** `time_s` (se manténs `time = time_s` por compatibilidade, ok; mas lê sempre `time_s`).
+  - [x] Importar em `graph_builder.py` e `fitness.py`; remover duplicados locais.
+- [x] **Consistência de campos**:
+  - [x] Arestas usam **sempre** `time_s` (se manténs `time = time_s` por compatibilidade, ok; mas lê sempre `time_s`).
 - [ ] (Opcional) Básico de lint:
   - [ ] `ruff`/`flake8` e um `pre-commit` com formatação (`black`) — opcional mas ajuda.
 
@@ -161,8 +161,8 @@
 - Sem warnings de variáveis não usadas nas funções principais.
 
 ### Testes rápidos
-- [ ] Corre o projeto — o output não muda (refactor puro).
-- [ ] Grep por `time =` nas arestas para confirmar que `time_s` é fonte de verdade.
+- [x] Corre o projeto — o output não muda (refactor puro).
+- [x] Grep por `time =` nas arestas para confirmar que `time_s` é fonte de verdade.
 
 ---
 
