@@ -1,7 +1,9 @@
 import argparse
 import json
+import math
 import os
 import pickle
+import statistics
 from pathlib import Path
 from typing import Dict, List, Sequence
 
@@ -9,6 +11,7 @@ from baselines import baseline_for_scenarios, DEFAULT_LAMBDAS
 from constants import PENALTY
 from evolution import run_nsga2
 from graph_builder import MultimodalGraph
+from hypervolume import hypervolume_2d_min, make_reference_from_union
 from loader import load_system, PROJECT_ROOT
 from scenarios import generate_scenarios
 
@@ -192,11 +195,18 @@ def main():
     save_json(output_dir / "scenarios.json", scenario_records)
 
     baseline_results = baseline_for_scenarios(graph, scenarios, lambdas=lambdas)
+    # Índice auxiliar para aceder rapidamente às soluções baseline por cenário.
+    baseline_by_id: Dict[str, Dict[str, object]] = {
+        entry["id"]: entry for entry in baseline_results
+    }
+
     for entry in baseline_results:
         scenario_dir = output_dir / entry["id"]
         ensure_dir(scenario_dir)
         save_json(scenario_dir / "baseline_pareto.json", entry)
     save_json(output_dir / "baseline_summary.json", baseline_results)
+
+    hv_summaries: List[Dict[str, object]] = []
 
     for scenario in scenario_records:
         scenario_id = scenario["id"]
@@ -219,6 +229,80 @@ def main():
         scenario_dir = output_dir / scenario_id
         ensure_dir(scenario_dir)
         save_json(scenario_dir / "pareto_solutions.json", solutions)
+
+        # --------- Hipervolume 2D (tempo total, emissões) para baseline vs NSGA-II --------- #
+        baseline_entry = baseline_by_id.get(scenario_id)
+
+        baseline_points = []
+        if baseline_entry:
+            for sol in baseline_entry.get("solutions", []):
+                m = sol.get("metrics") or {}
+                try:
+                    t = float(m.get("time_total_s"))
+                    e = float(m.get("emissions_g"))
+                except (TypeError, ValueError):
+                    continue
+                if not (math.isfinite(t) and math.isfinite(e)):
+                    continue
+                baseline_points.append((t, e))
+
+        nsga_points = []
+        for sol in solutions:
+            m = sol.get("metrics") or {}
+            try:
+                t = float(m.get("time_total_s"))
+                e = float(m.get("emissions_g"))
+            except (TypeError, ValueError):
+                continue
+            if not (math.isfinite(t) and math.isfinite(e)):
+                continue
+            nsga_points.append((t, e))
+
+        ref = make_reference_from_union(baseline_points, nsga_points, margin=1.10)
+        hv_baseline = hypervolume_2d_min(baseline_points, ref) if baseline_points else 0.0
+        hv_nsga2 = hypervolume_2d_min(nsga_points, ref) if nsga_points else 0.0
+
+        hv_entry = {
+            "scenario_id": scenario_id,
+            "ref": {"time_total_s": ref[0], "emissions_g": ref[1]},
+            "hv_baseline": hv_baseline,
+            "hv_nsga2": hv_nsga2,
+            "n_points_baseline": len(baseline_points),
+            "n_points_nsga2": len(nsga_points),
+        }
+        save_json(scenario_dir / "hypervolume.json", hv_entry)
+        hv_summaries.append(hv_entry)
+
+    # --------- Resumo global de hipervolume --------- #
+    summary: Dict[str, object] = {
+        "scenarios": hv_summaries,
+        "n_scenarios": len(hv_summaries),
+    }
+    if hv_summaries:
+        hv_baseline_vals = [float(e["hv_baseline"]) for e in hv_summaries]
+        hv_nsga_vals = [float(e["hv_nsga2"]) for e in hv_summaries]
+
+        def _stats(values: List[float]) -> Dict[str, float]:
+            if not values:
+                return {"mean": 0.0, "median": 0.0, "stdev": 0.0}
+            return {
+                "mean": float(statistics.fmean(values)),
+                "median": float(statistics.median(values)),
+                "stdev": float(statistics.pstdev(values)) if len(values) > 1 else 0.0,
+            }
+
+        summary["stats"] = {
+            "baseline": _stats(hv_baseline_vals),
+            "nsga2": _stats(hv_nsga_vals),
+        }
+
+        better_count = sum(1 for b, n in zip(hv_baseline_vals, hv_nsga_vals) if n > b)
+        summary["n_scenarios_nsga2_better"] = better_count
+        summary["fraction_scenarios_nsga2_better"] = (
+            float(better_count) / float(len(hv_summaries)) if hv_summaries else 0.0
+        )
+
+    save_json(output_dir / "hypervolume_summary.json", summary)
 
 
 if __name__ == "__main__":

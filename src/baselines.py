@@ -50,6 +50,35 @@ def _accumulate_weight(path: Iterable[str], graph, lam: float) -> float:
     return total
 
 
+def _pareto_filter_solutions(solutions: List[BaselineSolution]) -> List[BaselineSolution]:
+    """
+    Filtra a lista de soluções baseline, removendo entradas dominadas em 2D
+    (minimização de time_total_s e emissions_g).
+    """
+    if not solutions:
+        return []
+
+    points: List[Tuple[float, float]] = []
+    for sol in solutions:
+        m = sol.metrics
+        t = float(m.get("time_total_s", float("inf")))
+        e = float(m.get("emissions_g", float("inf")))
+        points.append((t, e))
+
+    pareto: List[BaselineSolution] = []
+    for i, (ti, ei) in enumerate(points):
+        dominated = False
+        for j, (tj, ej) in enumerate(points):
+            if j == i:
+                continue
+            if tj <= ti and ej <= ei and (tj < ti or ej < ei):
+                dominated = True
+                break
+        if not dominated:
+            pareto.append(solutions[i])
+    return pareto
+
+
 def run_baseline_dijkstra(
     graph,
     origin: str,
@@ -80,6 +109,18 @@ def run_baseline_dijkstra(
             continue
         if not isinstance(metrics, dict):
             continue
+
+        # Aplicar a mesma regra de tarifa usada no NSGA-II:
+        # se não houver qualquer segmento de trânsito, não há tarifa aplicada.
+        segments = metrics.get("segments") or []
+        has_transit = any(
+            isinstance(seg, dict) and seg.get("transit")
+            for seg in segments
+        )
+        if not has_transit:
+            metrics = metrics.copy()
+            metrics["fare_cost"] = 0.0
+            metrics["fare_selected"] = None
 
         time_total = metrics.get("time_total_s")
         emissions = metrics.get("emissions_g")
@@ -132,15 +173,38 @@ def baseline_for_scenarios(
                 continue
 
             solutions = run_baseline_dijkstra(graph, origin, dest, lambdas=lambdas)
-            serialized = [
-                {
-                    "lambda": sol.lam,
-                    "path": sol.path,
-                    "metrics": sol.metrics,
-                    "weight_value": sol.weight_value,
-                }
-                for sol in solutions
-            ]
+
+            # Aplicar filtro Pareto 2D (tempo total, emissões) às soluções baseline.
+            pareto_solutions = _pareto_filter_solutions(solutions)
+
+            # Identificar extremos (mínimo tempo, mínimo emissões) dentro do conjunto.
+            min_time_idx = None
+            min_emis_idx = None
+            if pareto_solutions:
+                times = [float(sol.metrics.get("time_total_s", float("inf"))) for sol in pareto_solutions]
+                emis = [float(sol.metrics.get("emissions_g", float("inf"))) for sol in pareto_solutions]
+                min_time_idx = min(range(len(pareto_solutions)), key=lambda i: times[i])
+                min_emis_idx = min(range(len(pareto_solutions)), key=lambda i: emis[i])
+
+            serialized = []
+            for idx, sol in enumerate(pareto_solutions):
+                extreme: Optional[str] = None
+                if min_time_idx is not None and idx == min_time_idx and idx == min_emis_idx:
+                    extreme = "min_time_and_emissions"
+                elif min_time_idx is not None and idx == min_time_idx:
+                    extreme = "min_time"
+                elif min_emis_idx is not None and idx == min_emis_idx:
+                    extreme = "min_emissions"
+
+                serialized.append(
+                    {
+                        "lambda": sol.lam,
+                        "path": sol.path,
+                        "metrics": sol.metrics,
+                        "weight_value": sol.weight_value,
+                        "extreme": extreme,
+                    }
+                )
             scenario_id = scenario.get("id")
             if not scenario_id:
                 scenario_id = f"{scenario_type}_{index:03d}"
