@@ -2,15 +2,15 @@ import random
 from typing import Iterable, List, Sequence
 
 from deap import base, creator, tools
-from constants import EMISSION_METRO_G_PER_KM, EMISSION_STCP_G_PER_KM
+from constants import EMISSION_METRO_G_PER_KM, EMISSION_STCP_G_PER_KM, PENALTY
 from fitness import fitness_from_metrics
-
-PENALTY = 1e9
 TIME_NORM_FACTOR = 3600.0  # normalização heurística (1 hora)
 EMISSION_NORM_FACTOR = 100.0  # normalização heurística
 
-creator.create('FitnessMultiObj', base.Fitness, weights=(-1.0, -1.0, -1.0))
-creator.create('IndividualPath', list, fitness=creator.FitnessMultiObj)
+if not hasattr(creator, 'FitnessMultiObj'):
+    creator.create('FitnessMultiObj', base.Fitness, weights=(-1.0, -1.0, -1.0))
+if not hasattr(creator, 'IndividualPath'):
+    creator.create('IndividualPath', list, fitness=creator.FitnessMultiObj)
 if not hasattr(creator, 'FitnessMultiObjCost'):
     creator.create('FitnessMultiObjCost', base.Fitness, weights=(-1.0, -1.0, -1.0, -1.0))
 if not hasattr(creator, 'IndividualPathCost'):
@@ -54,7 +54,7 @@ def evaluate_individual(graph, individual, walk_policy=None, w_max=None, t_max=N
         return _penalty_tuple(include_cost)
 
     transfers = metrics.get("n_transfers")
-    if t_max is not None and transfers is not None and transfers >= t_max:
+    if t_max is not None and transfers is not None and transfers > t_max:
         return _penalty_tuple(include_cost)
 
     fitness_values = fitness_from_metrics(metrics, walk_policy=walk_policy)

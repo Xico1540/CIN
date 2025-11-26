@@ -2,11 +2,15 @@ import argparse
 import os
 import pickle
 from typing import Optional
-from loader import load_system, PREFIX_METRO, PREFIX_STCP
-from graph_builder import MultimodalGraph
-from evolution import PENALTY, run_nsga2
+from loader import load_system, PREFIX_METRO, PREFIX_STCP, PROJECT_ROOT
+from graph_builder import MultimodalGraph, add_direct_walk_edge
+from constants import PENALTY
+from evolution import run_nsga2
 
-GRAPH_CACHE_FILE = "graph_cache.pkl"
+OUTPUTS_DIR = os.path.join(PROJECT_ROOT, "outputs")
+CACHE_DIR = os.path.join(OUTPUTS_DIR, "cache")
+PARETO_DIR = os.path.join(OUTPUTS_DIR, "pareto")
+GRAPH_CACHE_FILE = os.path.join(CACHE_DIR, "graph_cache.pkl")
 
 
 def _parse_point(value):
@@ -47,6 +51,9 @@ def run_example(origin=None, dest=None, origin_name=None, dest_name=None,
         c.append(PREFIX_STCP + "_" + s)
         # remover duplicados mantendo ordem
         return list(dict.fromkeys(c))
+
+    # Garante estrutura de outputs/cache
+    os.makedirs(CACHE_DIR, exist_ok=True)
 
     # Tenta carregar grafo do cache
     if os.path.exists(GRAPH_CACHE_FILE):
@@ -126,6 +133,29 @@ def run_example(origin=None, dest=None, origin_name=None, dest_name=None,
     dest_node = resolve_input(dest, dest_name, "DEST")
 
     print(f"Origin resolved: {origin_node}, Destination resolved: {dest_node}")
+
+    # Tentar adicionar aresta pedonal direta ORIGIN↔DEST se respeitar wmax_s e regras do Douro.
+    try:
+        nx_graph = G.G if hasattr(G, "G") else G
+        o_data = nx_graph.nodes[origin_node]
+        d_data = nx_graph.nodes[dest_node]
+        origin_latlon = (float(o_data.get("lat")), float(o_data.get("lon")))
+        dest_latlon = (float(d_data.get("lat")), float(d_data.get("lon")))
+    except Exception:
+        origin_latlon = None
+        dest_latlon = None
+
+    if origin_latlon and dest_latlon:
+        added = add_direct_walk_edge(
+            G,
+            origin_node,
+            dest_node,
+            origin_latlon,
+            dest_latlon,
+            {"wmax_s": wmax_s},
+        )
+        if added:
+            print("[info] Added direct walk edge ORIGIN↔DEST within wmax_s and bridge rules.")
     print("Running NSGA-II...")
     pop = run_nsga2(
         G,
@@ -141,6 +171,7 @@ def run_example(origin=None, dest=None, origin_name=None, dest_name=None,
     print("NSGA-II finished.")
 
     import json
+    os.makedirs(PARETO_DIR, exist_ok=True)
     solutions = []
     seen = set()
     for ind in pop:
@@ -153,8 +184,13 @@ def run_example(origin=None, dest=None, origin_name=None, dest_name=None,
         metrics = G.path_metrics(list(ind))
         segs = metrics.get("segments") or []
         time_total = sum(seg.get("time_s", 0.0) for seg in segs)
+        path_simplified = metrics.get("path_simplified")
+        if isinstance(path_simplified, list) and path_simplified:
+            path_out = path_simplified
+        else:
+            path_out = list(ind)
         solutions.append({
-            "path": list(ind),
+            "path": path_out,
             "time_s": time_total,
             "emissions_g": metrics.get("emissions_g"),
             "walk_m": metrics.get("walk_m"),
@@ -168,9 +204,10 @@ def run_example(origin=None, dest=None, origin_name=None, dest_name=None,
             "segments": segs,
             "has_walk": any(seg.get("mode") == "walk" for seg in segs),
         })
-    with open("pareto_solutions.json", "w") as f:
+    pareto_path = os.path.join(PARETO_DIR, "pareto_solutions.json")
+    with open(pareto_path, "w") as f:
         json.dump(solutions, f, indent=2)
-    print("Pareto solutions saved to pareto_solutions.json")
+    print("Pareto solutions saved to", pareto_path)
 
 
 

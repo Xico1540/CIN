@@ -6,13 +6,17 @@ from pathlib import Path
 from typing import Dict, List, Sequence
 
 from baselines import baseline_for_scenarios, DEFAULT_LAMBDAS
-from evolution import PENALTY, run_nsga2
+from constants import PENALTY
+from evolution import run_nsga2
 from graph_builder import MultimodalGraph
-from loader import load_system
+from loader import load_system, PROJECT_ROOT
 from scenarios import generate_scenarios
 
 
-GRAPH_CACHE_FILE = "graph_cache.pkl"
+OUTPUTS_DIR = Path(PROJECT_ROOT) / "outputs"
+CACHE_DIR = OUTPUTS_DIR / "cache"
+DEFAULT_EXPERIMENTS_DIR = OUTPUTS_DIR / "experiments"
+GRAPH_CACHE_FILE = str(CACHE_DIR / "graph_cache.pkl")
 
 
 def load_or_build_graph(
@@ -30,7 +34,9 @@ def load_or_build_graph(
     graph = MultimodalGraph(data, walk_radius_m=walk_radius)
 
     if use_cache and cache_file:
-        with open(cache_file, "wb") as fh:
+        cache_path = Path(cache_file)
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(cache_path, "wb") as fh:
             pickle.dump(graph, fh)
 
     return graph
@@ -59,6 +65,19 @@ def serialize_population(graph: MultimodalGraph, population, include_cost: bool 
             continue
 
         segments = metrics.get("segments") or []
+
+        path_simplified = metrics.get("path_simplified")
+        if isinstance(path_simplified, list) and path_simplified:
+            path = path_simplified
+
+        # Pontes usadas neste caminho (se existirem segmentos walk com `bridge_id`).
+        used_bridges = sorted(
+            {
+                seg.get("bridge_id")
+                for seg in segments
+                if isinstance(seg, dict) and seg.get("mode") == "walk" and seg.get("bridge_id")
+            }
+        )
         info = {
             "path": path,
             "metrics": {
@@ -77,6 +96,8 @@ def serialize_population(graph: MultimodalGraph, population, include_cost: bool 
             "segments": segments,
             "zones_passed": metrics.get("zones_passed"),
             "has_walk": any(isinstance(seg, dict) and seg.get("mode") == "walk" for seg in segments),
+            "used_bridge_ids": used_bridges,
+            "blocked_walk_edges_douro": getattr(graph, "blocked_douro_walk_edges", 0),
         }
         solutions.append(info)
     return solutions
@@ -107,7 +128,7 @@ def main():
         help="Tipos de cenários (separados por vírgulas).",
     )
     parser.add_argument("--random-seed", type=int, default=None, help="Seed para geração de cenários.")
-    parser.add_argument("--output-dir", default="experiments", help="Diretório onde guardar os resultados.")
+    parser.add_argument("--output-dir", default=str(DEFAULT_EXPERIMENTS_DIR), help="Diretório onde guardar os resultados.")
     parser.add_argument("--graph-cache", default=GRAPH_CACHE_FILE, help="Ficheiro para cache do grafo.")
     parser.add_argument("--no-cache", action="store_true", help="Não utilizar cache do grafo.")
     parser.add_argument("--pop-size", type=int, default=50, help="Tamanho da população NSGA-II.")

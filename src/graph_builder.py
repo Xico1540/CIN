@@ -1,5 +1,7 @@
 import difflib
+import json
 import math
+import os
 import re
 import unicodedata
 from typing import Dict, Iterable, List, Optional, Tuple
@@ -13,10 +15,26 @@ from constants import (
     PENALTY,
     WALK_SPEED_M_S,
 )
+from loader import BRIDGE_RULES, PROJECT_ROOT, load_bridge_rules
 
 WALK_RADIUS_METERS = 400
 METRO_CRUISE_SPEED_KMH = 40.0
 STCP_CRUISE_SPEED_KMH = 30.0
+
+# Bounding box aproximado do Douro na zona urbana (Porto-Gaia)
+DOURO_MIN_LAT = 41.12
+DOURO_MAX_LAT = 41.16
+DOURO_MIN_LON = -8.65
+DOURO_MAX_LON = -8.56
+# Linha média aproximada do rio: latitudes superiores ≈ margem norte (Porto),
+# inferiores ≈ margem sul (Gaia).
+DOURO_MID_LAT = 41.138
+
+_DOURO_DEBUG_COUNT = 0
+_BRIDGES_GEOMETRY_CACHE: Optional[List[dict]] = None
+BRIDGES_GEOMETRY_PATH = os.path.join(
+    PROJECT_ROOT, "data", "bridges", "bridges_geometry.json"
+)
 
 
 def to_seconds(hms: str) -> int:
@@ -31,6 +49,333 @@ def haversine(lat1, lon1, lat2, lon2):
     dlambda = math.radians(lon2 - lon1)
     a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
     return 2 * R * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """
+    Versão explícita de Haversine que devolve a distância em metros.
+
+    Nota: a função `haversine` existente já devolve metros; esta é apenas
+    uma *wrapper* com nome mais expressivo para reutilização noutros módulos.
+    """
+    return float(haversine(lat1, lon1, lat2, lon2))
+
+
+def point_to_segment_distance_m(
+    p: tuple[float, float],
+    a: tuple[float, float],
+    b: tuple[float, float],
+) -> float:
+    """
+    Distância mínima (em metros) entre um ponto P e o segmento AB definido em lat/lon.
+
+    Usa uma projecção aproximada (equirectangular) adequada para distâncias locais
+    na área do Grande Porto. Para segmentos muito grandes a aproximação deixa de ser
+    rigorosa, mas é suficiente para modelar travessias de pontes.
+    """
+    lat_p, lon_p = p
+    lat_a, lon_a = a
+    lat_b, lon_b = b
+
+    # Se A e B coincidirem, devolve distância ponto–ponto.
+    if lat_a == lat_b and lon_a == lon_b:
+        return haversine_m(lat_p, lon_p, lat_a, lon_a)
+
+    # Conversão aproximada lat/lon → metros numa projecção local.
+    ref_lat = (lat_a + lat_b + lat_p) / 3.0
+    meters_per_deg_lat = 111_000.0
+    cos_lat = math.cos(math.radians(ref_lat))
+    if abs(cos_lat) < 1e-6:
+        cos_lat = 1e-6
+    meters_per_deg_lon = 111_000.0 * cos_lat
+
+    def to_xy(lat: float, lon: float) -> tuple[float, float]:
+        x = (lon - lon_a) * meters_per_deg_lon
+        y = (lat - lat_a) * meters_per_deg_lat
+        return x, y
+
+    ax, ay = 0.0, 0.0
+    bx, by = to_xy(lat_b, lon_b)
+    px, py = to_xy(lat_p, lon_p)
+
+    abx, aby = bx - ax, by - ay
+    ab_len2 = abx * abx + aby * aby
+    if ab_len2 == 0.0:
+        # Segmento degenerado, já tratado acima mas fica aqui por segurança.
+        dx, dy = px - ax, py - ay
+        return math.hypot(dx, dy)
+
+    # Projecção de AP sobre AB (parâmetro t em [0,1] ao longo do segmento).
+    apx, apy = px - ax, py - ay
+    t = (apx * abx + apy * aby) / ab_len2
+    t = max(0.0, min(1.0, t))
+
+    closest_x = ax + t * abx
+    closest_y = ay + t * aby
+
+    dx = px - closest_x
+    dy = py - closest_y
+    return math.hypot(dx, dy)
+
+
+def remove_cycles(path: Iterable[str]) -> List[str]:
+    """
+    Remove ciclos simples de um caminho mantendo apenas a primeira ocorrência
+    de cada nó e cortando loops intermédios.
+
+    Exemplo:
+        [A, B, C, B, D] -> [A, B, D]
+        [A, B, C, D]    -> igual
+    """
+    result: List[str] = []
+    last_index: Dict[str, int] = {}
+
+    for node in path:
+        if node in last_index:
+            idx = last_index[node]
+            # remover nós após idx no resultado e do mapa de índices
+            for removed in result[idx + 1 :]:
+                last_index.pop(removed, None)
+            result = result[: idx + 1]
+        else:
+            last_index[node] = len(result)
+            result.append(node)
+
+    return result
+
+
+def _in_douro_bbox(lat: float, lon: float) -> bool:
+    """
+    Verifica se o ponto está dentro de uma bounding box aproximada para o Douro
+    na zona urbana Porto–Gaia.
+    """
+    return (
+        DOURO_MIN_LAT <= lat <= DOURO_MAX_LAT
+        and DOURO_MIN_LON <= lon <= DOURO_MAX_LON
+    )
+
+
+def is_douro_walk_crossing(
+    lat1: float,
+    lon1: float,
+    lat2: float,
+    lon2: float,
+) -> bool:
+    """
+    Heurística simples: uma aresta walk "cruza o Douro" se ligar dois pontos
+    dentro da bounding box do rio mas em lados opostos da latitude média.
+
+    Não tenta modelar o traçado exacto do rio — apenas distingue de forma
+    robusta "margem norte" vs "margem sul" na zona urbana.
+    """
+    # Ambos os pontos têm de estar na zona do rio; caso contrário não é travessia.
+    if not (_in_douro_bbox(lat1, lon1) and _in_douro_bbox(lat2, lon2)):
+        return False
+
+    side1_north = lat1 >= DOURO_MID_LAT
+    side2_north = lat2 >= DOURO_MID_LAT
+
+    # Se estão em lados diferentes da linha média, consideramos travessia.
+    return side1_north != side2_north
+
+
+def crosses_douro(
+    p1: tuple[float, float],
+    p2: tuple[float, float],
+    debug: bool = False,
+) -> bool:
+    """
+    Devolve True se o segmento walk entre P1 e P2 ligar lados opostos do Douro
+    dentro da zona urbana (bounding box aproximada).
+
+    Se `debug=True`, imprime até 5 exemplos de travessias detetadas para
+    validação manual.
+    """
+    global _DOURO_DEBUG_COUNT
+
+    lat1, lon1 = p1
+    lat2, lon2 = p2
+    crossed = is_douro_walk_crossing(lat1, lon1, lat2, lon2)
+
+    if debug and crossed and _DOURO_DEBUG_COUNT < 5:
+        _DOURO_DEBUG_COUNT += 1
+        print(
+            f"[douro-debug] crossing detected (#{_DOURO_DEBUG_COUNT}): "
+            f"P1=({lat1:.6f},{lon1:.6f}) P2=({lat2:.6f},{lon2:.6f})"
+        )
+
+    return crossed
+
+
+def _load_bridges_geometry() -> List[dict]:
+    """
+    Carrega e faz cache da geometria de pontes a partir de
+    `data/bridges/bridges_geometry.json`.
+    """
+    global _BRIDGES_GEOMETRY_CACHE
+    if _BRIDGES_GEOMETRY_CACHE is not None:
+        return _BRIDGES_GEOMETRY_CACHE
+
+    try:
+        with open(BRIDGES_GEOMETRY_PATH, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+            if isinstance(data, list):
+                _BRIDGES_GEOMETRY_CACHE = data
+            else:
+                _BRIDGES_GEOMETRY_CACHE = []
+    except (OSError, json.JSONDecodeError):
+        _BRIDGES_GEOMETRY_CACHE = []
+
+    return _BRIDGES_GEOMETRY_CACHE
+
+
+def nearest_bridge_for_walk_edge(
+    p1: tuple[float, float],
+    p2: tuple[float, float],
+    bridges_geometry: Optional[List[dict]] = None,
+) -> Optional[str]:
+    """
+    Dado um segmento walk P1->P2, devolve o `bridge_id` da ponte mais próxima
+    do ponto médio do segmento, respeitando o `snap_radius_m` da ponte.
+
+    Se não houver nenhuma ponte suficientemente próxima, devolve None.
+    """
+    if bridges_geometry is None:
+        bridges_geometry = _load_bridges_geometry()
+
+    if not bridges_geometry:
+        return None
+
+    lat1, lon1 = p1
+    lat2, lon2 = p2
+    mid_lat = 0.5 * (lat1 + lat2)
+    mid_lon = 0.5 * (lon1 + lon2)
+
+    best_id: Optional[str] = None
+    best_dist: Optional[float] = None
+    best_radius: float = 0.0
+
+    for bridge in bridges_geometry:
+        try:
+            b_id = str(bridge.get("id") or "").strip()
+            b_lat = float(bridge.get("midpoint_lat"))
+            b_lon = float(bridge.get("midpoint_lon"))
+            snap_radius = float(bridge.get("snap_radius_m", 0.0))
+        except (TypeError, ValueError):
+            continue
+        if not b_id or snap_radius <= 0.0:
+            continue
+
+        d = haversine_m(mid_lat, mid_lon, b_lat, b_lon)
+        if best_dist is None or d < best_dist:
+            best_dist = d
+            best_id = b_id
+            best_radius = snap_radius
+
+    if best_dist is None or best_id is None:
+        return None
+
+    if best_dist > best_radius:
+        return None
+
+    return best_id
+
+
+def is_walk_edge_allowed(
+    p1: tuple[float, float],
+    p2: tuple[float, float],
+) -> bool:
+    """
+    Regra de conveniência: usa a heurística do Douro + regras globais de pontes.
+
+    Mantida para compatibilidade, mas a lógica principal está agora em
+    `_add_walking_edges`, `add_virtual_point` e `add_direct_walk_edge`.
+    """
+    if not crosses_douro(p1, p2):
+        return True
+    if not BRIDGE_RULES:
+        load_bridge_rules()
+    bridge_id = nearest_bridge_for_walk_edge(p1, p2)
+    if bridge_id is None:
+        return False
+    return bool(BRIDGE_RULES.get(bridge_id))
+
+
+def add_direct_walk_edge(
+    graph,
+    origin_id: str,
+    dest_id: str,
+    origin_latlon: tuple[float, float],
+    dest_latlon: tuple[float, float],
+    config: Optional[dict] = None,
+) -> bool:
+    """
+    Adiciona uma aresta pedonal direta ORIGIN→DEST (e o inverso) se:
+
+    - respeitar um eventual limite global de tempo a pé (`wmax_s`, em segundos);
+    - respeitar as regras de travessia do Douro/pontes, quando aplicáveis.
+
+    Retorna True se a aresta foi realmente adicionada, False caso contrário.
+    """
+    if config is None:
+        config = {}
+
+    wmax_s = config.get("wmax_s")
+
+    lat_o, lon_o = origin_latlon
+    lat_d, lon_d = dest_latlon
+
+    # distância e tempo a pé
+    dist_m = haversine_m(lat_o, lon_o, lat_d, lon_d)
+    walk_time_s = dist_m / WALK_SPEED_M_S
+
+    # respeitar limite global de caminhada se existir
+    if wmax_s is not None:
+        try:
+            wmax_val = float(wmax_s)
+        except (TypeError, ValueError):
+            wmax_val = None
+        if wmax_val is not None and walk_time_s > wmax_val:
+            return False
+
+    p1 = (lat_o, lon_o)
+    p2 = (lat_d, lon_d)
+
+    bridge_attr = None
+    # aplicar regras do Douro/pontes se atravessar a zona do rio
+    if crosses_douro(p1, p2):
+        if not BRIDGE_RULES:
+            load_bridge_rules()
+        bridge_id = nearest_bridge_for_walk_edge(p1, p2)
+        allowed = bool(bridge_id and BRIDGE_RULES.get(bridge_id))
+        if not allowed:
+            if hasattr(graph, "blocked_douro_walk_edges"):
+                graph.blocked_douro_walk_edges += 1
+            return False
+        bridge_attr = bridge_id
+
+    # obter o objeto networkx interno (MultimodalGraph ou DiGraph cru)
+    G_obj = graph.G if hasattr(graph, "G") else graph
+
+    if origin_id not in G_obj or dest_id not in G_obj:
+        return False
+
+    attrs = {
+        "mode": "walk",
+        "transit": False,
+        "time_s": walk_time_s,
+        "time": walk_time_s,
+        "distance_m": dist_m,
+        "route_id": None,
+        "trip_id": None,
+    }
+    if bridge_attr is not None:
+        attrs["bridge_id"] = bridge_attr
+
+    G_obj.add_edge(origin_id, dest_id, **attrs)
+    G_obj.add_edge(dest_id, origin_id, **attrs)
+
+    return True
 
 
 def _fallback_speed(mode: str) -> float:
@@ -63,6 +408,7 @@ class MultimodalGraph:
         self.route_headways: Dict[Tuple[str, str], float] = {}
         self.headway_by_route: Dict[str, float] = {}
         self.virtual_nodes: set[str] = set()
+        self.blocked_douro_walk_edges: int = 0
         self.G = nx.DiGraph()
         self.node_lookup: Dict[Tuple[str, str], str] = {}
         self._build_nodes()
@@ -121,6 +467,7 @@ class MultimodalGraph:
     def _build_edges(self):
         for mode, system in self.networks.items():
             self._add_transit_edges(system, mode)
+            self._add_transfer_edges(system, mode)
         self._add_walking_edges()
 
     def _add_transit_edges(self, system: dict, mode: str):
@@ -176,27 +523,140 @@ class MultimodalGraph:
             time_s = max(dist_m / speed, 1.0)
         return float(time_s)
 
-    def _add_walking_edges(self):
+    def _add_transfer_edges(self, system: dict, mode: str):
+        transfers = system.get("transfers")
+        if transfers is None or transfers.empty:
+            return
+
+        for _, row in transfers.iterrows():
+            from_stop = row.get("from_stop_id")
+            to_stop = row.get("to_stop_id")
+            if pd.isna(from_stop) or pd.isna(to_stop):
+                continue
+
+            from_id = self.node_lookup.get((mode, str(from_stop)))
+            to_id = self.node_lookup.get((mode, str(to_stop)))
+            if not from_id or not to_id or from_id not in self.G or to_id not in self.G:
+                continue
+
+            transfer_type = row.get("transfer_type")
+            try:
+                transfer_type_int = int(transfer_type) if not pd.isna(transfer_type) else None
+            except (TypeError, ValueError):
+                transfer_type_int = None
+
+            # GTFS: 3 = transferência não permitida → ignorar
+            if transfer_type_int == 3:
+                continue
+
+            transfer_time = 0.0
+            if "min_transfer_time" in transfers.columns:
+                val = row.get("min_transfer_time")
+                try:
+                    transfer_time = float(val) if not pd.isna(val) else 0.0
+                except (TypeError, ValueError):
+                    transfer_time = 0.0
+
+            attrs = {
+                "mode": "transfer",
+                "transit": False,
+                "time_s": transfer_time,
+                "time": transfer_time,
+                "distance_m": 0.0,
+                "route_id": None,
+                "trip_id": None,
+                "transfer_type": transfer_type_int,
+            }
+            self.G.add_edge(from_id, to_id, **attrs)
+
+    def _walk_cell_index(self):
+        """
+        Constrói um índice espacial em grelha para as paragens de modo a
+        limitar a procura de vizinhos a células próximas.
+        """
         stops_list = self.stops[["node_id", "stop_lat", "stop_lon"]].values.tolist()
-        for i in range(len(stops_list)):
-            id1, lat1, lon1 = stops_list[i]
-            for j in range(i + 1, len(stops_list)):
-                id2, lat2, lon2 = stops_list[j]
-                d = haversine(float(lat1), float(lon1), float(lat2), float(lon2))
-                if d <= self.walk_radius:
-                    walk_time = d / WALK_SPEED_M_S
-                    attrs_forward = {
-                        "mode": "walk",
-                        "transit": False,
-                        "time_s": walk_time,
-                        "time": walk_time,
-                        "distance_m": d,
-                    }
-                    attrs_backward = attrs_forward.copy()
-                    if not self.G.has_edge(id1, id2) or not self.G[id1][id2].get("transit", False):
-                        self.G.add_edge(id1, id2, **attrs_forward)
-                    if not self.G.has_edge(id2, id1) or not self.G[id2][id1].get("transit", False):
-                        self.G.add_edge(id2, id1, **attrs_backward)
+        if not stops_list:
+            return {}, 0.0, 0.0
+
+        # Aproximação: 1 grau de latitude ~ 111 km
+        lats = [float(lat) for _, lat, _ in stops_list]
+        ref_lat = sum(lats) / len(lats)
+        meters_per_deg_lat = 111_000.0
+        cos_lat = math.cos(math.radians(ref_lat))
+        if abs(cos_lat) < 1e-6:
+            cos_lat = 1e-6
+        meters_per_deg_lon = 111_000.0 * cos_lat
+
+        cell_size_deg_lat = self.walk_radius / meters_per_deg_lat
+        cell_size_deg_lon = self.walk_radius / meters_per_deg_lon
+
+        grid: Dict[Tuple[int, int], List[Tuple[str, float, float]]] = {}
+        for node_id, lat, lon in stops_list:
+            lat_f = float(lat)
+            lon_f = float(lon)
+            cy = int(math.floor(lat_f / cell_size_deg_lat))
+            cx = int(math.floor(lon_f / cell_size_deg_lon))
+            grid.setdefault((cx, cy), []).append((node_id, lat_f, lon_f))
+
+        return grid, cell_size_deg_lat, cell_size_deg_lon
+
+    def _add_walking_edges(self):
+        grid, _, _ = self._walk_cell_index()
+        if not grid:
+            return
+
+        seen_pairs: set[Tuple[str, str]] = set()
+
+        for (cx, cy), items in grid.items():
+            for node_id, lat, lon in items:
+                for nx_cell in (cx - 1, cx, cx + 1):
+                    for ny_cell in (cy - 1, cy, cy + 1):
+                        for other_id, other_lat, other_lon in grid.get((nx_cell, ny_cell), []):
+                            if other_id == node_id:
+                                continue
+                            pair = (node_id, other_id) if node_id < other_id else (other_id, node_id)
+                            if pair in seen_pairs:
+                                continue
+                            seen_pairs.add(pair)
+
+                            d = haversine(lat, lon, other_lat, other_lon)
+                            if d <= self.walk_radius:
+                                p1 = (float(lat), float(lon))
+                                p2 = (float(other_lat), float(other_lon))
+
+                                # Classifica travessias do Douro e conta bloqueios.
+                                if crosses_douro(p1, p2):
+                                    if not BRIDGE_RULES:
+                                        load_bridge_rules()
+                                    bridge_id = nearest_bridge_for_walk_edge(p1, p2)
+                                    allowed = bool(bridge_id and BRIDGE_RULES.get(bridge_id))
+                                    if not allowed:
+                                        self.blocked_douro_walk_edges += 1
+                                        continue
+                                    bridge_attr = bridge_id
+                                else:
+                                    allowed = True
+                                    bridge_attr = None
+
+                                if not allowed:
+                                    continue
+
+                                walk_time = d / WALK_SPEED_M_S
+                                attrs_forward = {
+                                    "mode": "walk",
+                                    "transit": False,
+                                    "time_s": walk_time,
+                                    "time": walk_time,
+                                    "distance_m": d,
+                                }
+                                if bridge_attr is not None:
+                                    attrs_forward["bridge_id"] = bridge_attr
+                                attrs_backward = attrs_forward.copy()
+                                u, v = pair
+                                if not self.G.has_edge(u, v) or not self.G[u][v].get("transit", False):
+                                    self.G.add_edge(u, v, **attrs_forward)
+                                if not self.G.has_edge(v, u) or not self.G[v][u].get("transit", False):
+                                    self.G.add_edge(v, u, **attrs_backward)
 
     # ---------------------- headways e tarifas ---------------------- #
 
@@ -250,6 +710,23 @@ class MultimodalGraph:
         self.virtual_nodes.add(node_id)
 
         for neighbor_id, dist in neighbors:
+            n_attrs = self.G.nodes.get(neighbor_id, {})
+            n_lat = float(n_attrs.get("lat"))
+            n_lon = float(n_attrs.get("lon"))
+            p1 = (float(lat), float(lon))
+            p2 = (n_lat, n_lon)
+
+            bridge_attr = None
+            if crosses_douro(p1, p2):
+                if not BRIDGE_RULES:
+                    load_bridge_rules()
+                bridge_id = nearest_bridge_for_walk_edge(p1, p2)
+                allowed = bool(bridge_id and BRIDGE_RULES.get(bridge_id))
+                if not allowed:
+                    self.blocked_douro_walk_edges += 1
+                    continue
+                bridge_attr = bridge_id
+
             walk_time = dist / WALK_SPEED_M_S
             attrs = {
                 "mode": "walk",
@@ -260,6 +737,8 @@ class MultimodalGraph:
                 "route_id": None,
                 "trip_id": None,
             }
+            if bridge_attr is not None:
+                attrs["bridge_id"] = bridge_attr
             self.G.add_edge(node_id, neighbor_id, **attrs)
             self.G.add_edge(neighbor_id, node_id, **attrs)
 
@@ -463,8 +942,9 @@ class MultimodalGraph:
         prev_transit_route: Optional[Tuple[str, str]] = None
         prev_block: Optional[Tuple[str, str, str]] = None
         transfers = 0
+        last_was_transfer = False
 
-        nodes = list(path)
+        nodes = remove_cycles(list(path))
         if not nodes:
             return self._penalised_metrics()
 
@@ -513,9 +993,10 @@ class MultimodalGraph:
                         }
                     )
                     waiting_time += wait_s
-                if prev_transit_route is not None and route_key != prev_transit_route:
+                if not last_was_transfer and prev_transit_route is not None and route_key != prev_transit_route:
                     transfers += 1
                 prev_block = block_key
+                last_was_transfer = False
 
             total_travel_time += time_s
             segment = {
@@ -541,16 +1022,31 @@ class MultimodalGraph:
                 _push_zone(zone_u)
                 _push_zone(zone_v)
             else:
-                walking_distance += distance_m
-                distance_km_by_mode[mode] += distance_m / 1000.0
+                if mode == "walk":
+                    walking_distance += distance_m
+                    distance_km_by_mode[mode] += distance_m / 1000.0
+                elif mode == "transfer":
+                    transfers += 1
+                    last_was_transfer = True
+                else:
+                    distance_km_by_mode[mode] += distance_m / 1000.0
                 prev_block = None
 
-        fare_cost, fare_selected = self._estimate_fare(
-            zones_passed,
-            origin_zone,
-            dest_zone,
-            routes_used,
-        )
+        # Determinar se houve ou não qualquer segmento de trânsito no caminho.
+        has_transit = any(isinstance(seg, dict) and seg.get("transit") for seg in segments)
+
+        if not has_transit:
+            # Percurso 100% walk/transfer → não há tarifa de transporte aplicada.
+            fare_cost = 0.0
+            fare_selected = None
+            zones_passed = []
+        else:
+            fare_cost, fare_selected = self._estimate_fare(
+                zones_passed,
+                origin_zone,
+                dest_zone,
+                routes_used,
+            )
         metrics = {
             "time_total_s": total_travel_time + waiting_time,
             "travel_time_s": total_travel_time,
@@ -565,6 +1061,7 @@ class MultimodalGraph:
             "segments": segments,
             "waits": dict(waits_by_route),
             "distance_km_by_mode": dict(distance_km_by_mode),
+            "path_simplified": nodes,
         }
         return metrics
 

@@ -1,0 +1,14 @@
+# bridges_pedestrian_rules.txt
+# Regra simples para o teu algoritmo: 1 = pode andar a pé (por defeito); 0 = não deve/pode.
+# Campos: id;name;walk_allowed;why
+#
+# Nota: regras baseadas no tipo de infraestrutura (rodoviária vs ferroviária) e na lei aplicável
+# (autoestradas/vias equiparadas proíbem peões quando devidamente sinalizadas). Confirma sempre se
+# há condicionamentos temporários (obras/cortes).
+
+luis_i;Ponte de D. Luís I;1;Travessia pedonal prevista (ponte urbana com tabuleiros usados por peões/metro).
+infante;Ponte do Infante D. Henrique;1;Ponte rodoviária urbana com passeios laterais.
+arrabida;Ponte da Arrábida;0;Integrada na VCI/IC23 (via rápida com regras de autoestrada/via equiparada) — modelar como sem travessia pedonal por defeito.
+freixo;Ponte do Freixo;0;A20/IP1/E01 (perfil de autoestrada) — proibição de peões em autoestradas/vias equiparadas.
+sao_joao;Ponte de São João;0;Ponte ferroviária (Linha do Norte) — sem travessia pedonal.
+maria_pia;Ponte D. Maria Pia;0;Ponte ferroviária (desativada) — atualmente sem travessia pedonal regular.

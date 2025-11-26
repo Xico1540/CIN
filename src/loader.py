@@ -2,12 +2,69 @@
 import os
 import pandas as pd
 import math
+from typing import Dict
 
 PREFIX_METRO = "METRO"
 PREFIX_STCP = "STCP"
 
 # local do root do projeto (assume estrutura project/src)
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+# caminho por omissão para regras de pontes
+DEFAULT_BRIDGES_RULES_PATH = os.path.join(
+    PROJECT_ROOT, "data", "bridges", "bridges_pedestrian_rules.txt"
+)
+
+# cache em memória das regras carregadas
+BRIDGE_RULES: Dict[str, bool] = {}
+
+
+def load_bridge_rules(path: str | None = None) -> Dict[str, bool]:
+    """
+    Carrega regras de atravessabilidade pedonal de pontes a partir de um ficheiro
+    de texto simples com o formato:
+
+        id;name;walk_allowed;why
+
+    - Linhas começadas por '#' ou vazias são ignoradas.
+    - Esperam-se exatamente 4 colunas separadas por ';'.
+    - `walk_allowed` deve ser '1' (True) ou '0' (False).
+
+    Devolve um dicionário {bridge_id: walk_allowed}.
+    """
+    global BRIDGE_RULES
+
+    rules: Dict[str, bool] = {}
+
+    if path is None:
+        path = DEFAULT_BRIDGES_RULES_PATH
+
+    if not path or not os.path.exists(path):
+        BRIDGE_RULES = rules
+        return rules
+
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            for raw_line in fh:
+                line = raw_line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                parts = [p.strip() for p in line.split(";")]
+                if len(parts) != 4:
+                    # linha mal formada → ignora silenciosamente
+                    continue
+                bridge_id, _name, walk_allowed, _why = parts
+                if not bridge_id:
+                    continue
+                if walk_allowed not in ("0", "1"):
+                    continue
+                rules[bridge_id] = walk_allowed == "1"
+    except OSError:
+        # Se houver erro de IO, mantém regras vazias
+        rules = {}
+
+    BRIDGE_RULES = rules
+    return rules
 
 def _candidate_paths(folder: str, filename: str):
     folder_norm = os.path.normpath(folder)

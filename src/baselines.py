@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
-from fitness import EMISSION_METRO_G_PER_KM, EMISSION_STCP_G_PER_KM, PENALTY
+from constants import EMISSION_METRO_G_PER_KM, EMISSION_STCP_G_PER_KM, PENALTY
 from evolution import EMISSION_NORM_FACTOR, TIME_NORM_FACTOR
 
 
