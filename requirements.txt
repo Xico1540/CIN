@@ -1,5 +1,4 @@
 deap
 networkx
 pandas
-
-
+streamlit

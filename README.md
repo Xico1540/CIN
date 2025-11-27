@@ -33,6 +33,11 @@ Requer Python 3.10+.
 pip install -r requirements.txt
 ```
 
+## Interface Web (Streamlit)
+- Executa `streamlit run app/streamlit_app.py`.
+- Introduz origem/destino (nome, ID ou coordenadas) e escolhe prioridades (tempo, CO₂, exercício, equilíbrio).
+- A app gera o Pareto atual, mostra tabela comparativa e descreve passo a passo da rota selecionada.
+
 ## Documentação
 - [CLI / Como executar](docs/CLI.md)
 - [Outputs / Ficheiros gerados](docs/OUTPUTS.md)
