@@ -16,7 +16,8 @@ cd C:\Users\Vasco\Documents\GitHub\CIN
 Para gerar **3 cenários por tipo** (curto, médio, longo) e correr tanto o baseline como o NSGA-II:
 
 ```bash
-   python experiments.py --metro data/Metro --stcp data/STCP --scenarios 3 --scenario-types short,mid,long --output-dir experiments_demo --walk-policy minimize --pop-size 20 --gens 10 --no-cache
+python src\experiments.py --metro data/Metro --stcp data/STCP --scenarios 3 --scenario-types short,mid,long --output-dir outputs\experiments\demo 
+  --walk-policy minimize --pop-size 20 --gens 10 --no-cache
 ```
 
 Notas:
@@ -28,13 +29,15 @@ Notas:
 
 ### Estrutura dos resultados
 
-Supondo `--output-dir experiments_demo`, ao terminar terás:
+Supondo `--output-dir outputs/experiments/demo`, ao terminar terás:
 
-- `experiments_demo/scenarios.json`: lista dos cenários gerados (cada entrada tem `id`, `type`, `origin`, `destination`, comprimentos, etc.).
-- `experiments_demo/baseline_summary.json`: resumo das soluções baseline para todos os cenários.
-- Para cada cenário `ID` (por exemplo `short_000`), uma pasta `experiments_demo/ID/` com:
-  - `baseline_pareto.json` — soluções do baseline Dijkstra-λ.
-  - `pareto_solutions.json` — soluções NSGA-II para o mesmo par O-D.
+- `outputs/experiments/demo/scenarios.json`: lista dos cenários gerados (cada entrada tem `id`, `type`, `origin`, `destination`, comprimentos, etc.).
+- `outputs/experiments/demo/baseline_summary.json`: resumo das soluções baseline para todos os cenários.
+- Para cada cenário `ID` (por exemplo `short_000`), uma pasta `outputs/experiments/demo/ID/` com:
+  - `baseline_pareto.json` — soluções do baseline Dijkstra-λ (com `segments`, `zones_passed`, `used_bridge_ids`, `blocked_walk_edges_douro` e `has_walk`, tal como no NSGA-II).
+  - `final_population.json` — população final do NSGA-II (indivíduos válidos deduplicados).
+  - `pareto_solutions.json` — soluções NSGA-II na frente Pareto (com caminhos completos e métricas).
+  - `pareto_front.json` — fronteira 2D (tempo vs emissões) usada nos cálculos de hipervolume.
 
 Os ficheiros `pareto_solutions.json` e `baseline_pareto.json` incluem agora agregados auditáveis:
 
@@ -49,12 +52,12 @@ Criei o script `scripts/domination_check.py` que percorre as pastas de cenários
 ### Executar o script
 
 ```bash
-python scripts\domination_check.py --root experiments_demo --walk-policy minimize
+python src\domination_check.py --root outputs/experiments/demo --walk-policy minimize
 ```
 
 Parâmetros:
 
-- `--root`: diretório onde o runner guardou os resultados (default `experiments`).
+- `--root`: diretório onde o runner guardou os resultados (default `outputs/experiments`).
 - `--walk-policy`: política usada no NSGA-II (`maximize` é o padrão; usa `minimize` se tiveres corrido o NSGA com minimização da caminhada).
 
 O output lista, por cenário, o número e a percentagem de soluções baseline dominadas. No fim mostra o total agregado, útil para o checklist “>50% dominados”.

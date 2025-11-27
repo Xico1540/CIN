@@ -5,15 +5,16 @@ import os
 import pickle
 import statistics
 from pathlib import Path
-from typing import Dict, List, Sequence
+from typing import Dict, List, Sequence, Tuple
 
 from baselines import baseline_for_scenarios, DEFAULT_LAMBDAS
 from constants import PENALTY
 from evolution import run_nsga2
 from graph_builder import MultimodalGraph
-from hypervolume import hypervolume_2d_min, make_reference_from_union
+from hypervolume import hypervolume_2d_min, make_reference_from_union, pareto_filter_2d_min
 from loader import load_system, PROJECT_ROOT
 from scenarios import generate_scenarios
+from deap import tools
 
 
 OUTPUTS_DIR = Path(PROJECT_ROOT) / "outputs"
@@ -30,8 +31,11 @@ def load_or_build_graph(
     use_cache: bool = True,
 ) -> MultimodalGraph:
     if use_cache and cache_file and os.path.exists(cache_file):
-        with open(cache_file, "rb") as fh:
-            return pickle.load(fh)
+        try:
+            with open(cache_file, "rb") as fh:
+                return pickle.load(fh)
+        except Exception as exc:
+            print(f"[cache] Falha ao carregar grafo em cache ({cache_file}): {exc}. Recriando grafo.")
 
     data = load_system(metro_folder, stcp_folder)
     graph = MultimodalGraph(data, walk_radius_m=walk_radius)
@@ -45,21 +49,31 @@ def load_or_build_graph(
     return graph
 
 
-def serialize_population(graph: MultimodalGraph, population, include_cost: bool = False) -> List[dict]:
+def serialize_population(
+    graph: MultimodalGraph,
+    population,
+    include_cost: bool = False,
+) -> Tuple[List[dict], Dict[str, int]]:
     solutions: List[dict] = []
-    seen = set()
+    seen_paths = set()
+    total_seen = 0
+    duplicates_removed = 0
+
+    def _safe_float(value) -> float | None:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
     for ind in population:
-        path = list(ind)
-        key = tuple(path)
-        if key in seen:
-            continue
-        seen.add(key)
+        total_seen += 1
+        path_raw = list(ind)
 
         if any(val >= PENALTY for val in ind.fitness.values):
             continue
 
         try:
-            metrics = graph.path_metrics(path)
+            metrics = graph.path_metrics(path_raw)
         except Exception:
             continue
         if not isinstance(metrics, dict):
@@ -71,7 +85,16 @@ def serialize_population(graph: MultimodalGraph, population, include_cost: bool 
 
         path_simplified = metrics.get("path_simplified")
         if isinstance(path_simplified, list) and path_simplified:
-            path = path_simplified
+            path = list(path_simplified)
+        else:
+            path = path_raw
+
+        path_key = tuple(path)
+        if path_key in seen_paths:
+            duplicates_removed += 1
+            continue
+
+        seen_paths.add(path_key)
 
         # Pontes usadas neste caminho (se existirem segmentos walk com `bridge_id`).
         used_bridges = sorted(
@@ -103,7 +126,12 @@ def serialize_population(graph: MultimodalGraph, population, include_cost: bool 
             "blocked_walk_edges_douro": getattr(graph, "blocked_douro_walk_edges", 0),
         }
         solutions.append(info)
-    return solutions
+    stats = {
+        "input_size": total_seen,
+        "output_size": len(solutions),
+        "duplicates_removed": duplicates_removed,
+    }
+    return solutions, stats
 
 
 def ensure_dir(path: Path):
@@ -113,6 +141,23 @@ def ensure_dir(path: Path):
 def save_json(path: Path, data):
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=2)
+
+
+def extract_points_2d(solutions: List[Dict[str, object]]) -> List[tuple[float, float]]:
+    pts: List[tuple[float, float]] = []
+    for sol in solutions:
+        metrics = sol.get("metrics") if isinstance(sol, dict) else None
+        if not isinstance(metrics, dict):
+            continue
+        try:
+            t = float(metrics.get("time_total_s"))
+            e = float(metrics.get("emissions_g"))
+        except (TypeError, ValueError):
+            continue
+        if not (math.isfinite(t) and math.isfinite(e)):
+            continue
+        pts.append((t, e))
+    return pts
 
 
 def parse_types(value: str) -> Sequence[str]:
@@ -194,7 +239,13 @@ def main():
 
     save_json(output_dir / "scenarios.json", scenario_records)
 
-    baseline_results = baseline_for_scenarios(graph, scenarios, lambdas=lambdas)
+    baseline_results = baseline_for_scenarios(
+        graph,
+        scenarios,
+        lambdas=lambdas,
+        w_max=args.wmax_s,
+        t_max=args.tmax,
+    )
     # Índice auxiliar para aceder rapidamente às soluções baseline por cenário.
     baseline_by_id: Dict[str, Dict[str, object]] = {
         entry["id"]: entry for entry in baseline_results
@@ -225,42 +276,47 @@ def main():
             include_cost=args.include_cost,
             seed_lambdas=seed_lambdas if seed_lambdas is not None else lambdas,
         )
-        solutions = serialize_population(graph, pop, include_cost=args.include_cost)
+        first_front = tools.sortNondominated(pop, k=len(pop), first_front_only=True)
+        nondominated = first_front[0] if first_front else []
+        final_population, final_stats = serialize_population(
+            graph,
+            pop,
+            include_cost=args.include_cost,
+        )
+        pareto_solutions, pareto_stats = serialize_population(
+            graph,
+            nondominated,
+            include_cost=args.include_cost,
+        )
+        print(
+            f"[pop] {scenario_id}: final={len(pop)} individuos, validos={final_stats['output_size']}, duplicados_removidos={final_stats['duplicates_removed']}"
+        )
+        print(
+            f"[pareto] {scenario_id}: frente_raw={len(nondominated)}, validos={pareto_stats['output_size']}, duplicados_removidos={pareto_stats['duplicates_removed']}"
+        )
         scenario_dir = output_dir / scenario_id
         ensure_dir(scenario_dir)
-        save_json(scenario_dir / "pareto_solutions.json", solutions)
+        save_json(scenario_dir / "final_population.json", final_population)
+        save_json(scenario_dir / "pareto_solutions.json", pareto_solutions)
 
         # --------- Hipervolume 2D (tempo total, emissões) para baseline vs NSGA-II --------- #
         baseline_entry = baseline_by_id.get(scenario_id)
 
-        baseline_points = []
-        if baseline_entry:
-            for sol in baseline_entry.get("solutions", []):
-                m = sol.get("metrics") or {}
-                try:
-                    t = float(m.get("time_total_s"))
-                    e = float(m.get("emissions_g"))
-                except (TypeError, ValueError):
-                    continue
-                if not (math.isfinite(t) and math.isfinite(e)):
-                    continue
-                baseline_points.append((t, e))
+        baseline_points = extract_points_2d(baseline_entry.get("solutions", [])) if baseline_entry else []
+        nsga_points = extract_points_2d(pareto_solutions)
 
-        nsga_points = []
-        for sol in solutions:
-            m = sol.get("metrics") or {}
-            try:
-                t = float(m.get("time_total_s"))
-                e = float(m.get("emissions_g"))
-            except (TypeError, ValueError):
-                continue
-            if not (math.isfinite(t) and math.isfinite(e)):
-                continue
-            nsga_points.append((t, e))
+        baseline_points = pareto_filter_2d_min(baseline_points)
+        nsga_points = pareto_filter_2d_min(nsga_points)
 
         ref = make_reference_from_union(baseline_points, nsga_points, margin=1.10)
         hv_baseline = hypervolume_2d_min(baseline_points, ref) if baseline_points else 0.0
         hv_nsga2 = hypervolume_2d_min(nsga_points, ref) if nsga_points else 0.0
+
+        points_payload = {
+            "baseline": [{"time_total_s": t, "emissions_g": e} for t, e in baseline_points],
+            "nsga2": [{"time_total_s": t, "emissions_g": e} for t, e in nsga_points],
+        }
+        save_json(scenario_dir / "pareto_front.json", points_payload)
 
         hv_entry = {
             "scenario_id": scenario_id,

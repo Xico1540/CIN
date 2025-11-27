@@ -1,0 +1,52 @@
+[
+  {
+    "id": "luis_i",
+    "name": "Ponte de D. Luís I",
+    "midpoint_lat": 41.1409,
+    "midpoint_lon": -8.6091,
+    "snap_radius_m": 400,
+    "note": "Coordenadas aproximadas do tabuleiro principal; suficiente para localizar travessias pedonais nas imediações."
+  },
+  {
+    "id": "infante",
+    "name": "Ponte do Infante D. Henrique",
+    "midpoint_lat": 41.14111,
+    "midpoint_lon": -8.60167,
+    "snap_radius_m": 400,
+    "note": "Centro aproximado da ponte rodoviária; raio pensado para apanhar acessos pedonais próximos."
+  },
+  {
+    "id": "arrabida",
+    "name": "Ponte da Arrábida",
+    "midpoint_lat": 41.1475,
+    "midpoint_lon": -8.6419,
+    "snap_radius_m": 500,
+    "note": "Geometria aproximada; usada apenas para decidir se um percurso tenta atravessar a Arrábida."
+  },
+  {
+    "id": "freixo",
+    "name": "Ponte do Freixo",
+    "midpoint_lat": 41.14194,
+    "midpoint_lon": -8.57944,
+    "snap_radius_m": 500,
+    "note": "Centro aproximado da ponte; raio generoso para englobar acessos rodoviários principais."
+  },
+  {
+    "id": "sao_joao",
+    "name": "Ponte de São João",
+    "midpoint_lat": 41.13889,
+    "midpoint_lon": -8.59528,
+    "snap_radius_m": 450,
+    "note": "Ponte ferroviária; coordenadas aproximadas apenas para efeitos de modelação de travessias."
+  },
+  {
+    "id": "maria_pia",
+    "name": "Ponte D. Maria Pia",
+    "midpoint_lat": 41.1378,
+    "midpoint_lon": -8.5993,
+    "snap_radius_m": 400,
+    "note": "Ponte ferroviária desativada; geometria aproximada, suficiente para verificar tentativas de travessia."
+  }
+]
+
+

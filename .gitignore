@@ -79,11 +79,7 @@ dmypy.json
 *.log
 
 # Local experiment outputs
-graph_cache.pkl
-experiments_*/
-experiments_demo/
-experiments_quick/
-*.json
+outputs/
 
 # Misc
 *.swp

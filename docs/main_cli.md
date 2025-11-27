@@ -53,6 +53,6 @@ Este comando:
 
 ## Saídas
 
-Após a execução, o ficheiro `pareto_solutions.json` contém as soluções não dominadas com métricas agregadas (`time_total_s`, `emissions_g`, `walk_m`, `wait_s_total`, `fare_cost`, `fare_selected`, etc.). Se desejar comparar com um baseline determinístico ou gerar cenários múltiplos, utilize antes `src/experiments.py` (ver `docs/experiments.md`).
+Após a execução, a pasta de resultados de cada cenário inclui `final_population.json`, `pareto_solutions.json` (só a frente Pareto) e `pareto_front.json` (pontos 2D tempo/emissões usados no HV). Se desejar comparar com um baseline determinístico ou gerar cenários múltiplos, utilize antes `src/experiments.py` (ver `docs/experiments.md`).
 
 

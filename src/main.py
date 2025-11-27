@@ -6,6 +6,7 @@ from loader import load_system, PREFIX_METRO, PREFIX_STCP, PROJECT_ROOT
 from graph_builder import MultimodalGraph, add_direct_walk_edge
 from constants import PENALTY
 from evolution import run_nsga2
+from deap import tools
 
 OUTPUTS_DIR = os.path.join(PROJECT_ROOT, "outputs")
 CACHE_DIR = os.path.join(OUTPUTS_DIR, "cache")
@@ -172,37 +173,54 @@ def run_example(origin=None, dest=None, origin_name=None, dest_name=None,
 
     import json
     os.makedirs(PARETO_DIR, exist_ok=True)
+    first_front = tools.sortNondominated(pop, k=len(pop), first_front_only=True)
+    nondominated = first_front[0] if first_front else []
+
     solutions = []
-    seen = set()
-    for ind in pop:
-        key = tuple(ind)
-        if key in seen: 
-            continue
-        seen.add(key)
+    seen_paths = set()
+    for ind in nondominated:
         if any(val >= PENALTY for val in ind.fitness.values):
             continue
-        metrics = G.path_metrics(list(ind))
+        path_raw = list(ind)
+        try:
+            metrics = G.path_metrics(path_raw)
+        except Exception:
+            continue
+        if not isinstance(metrics, dict):
+            continue
+        if metrics.get("time_total_s", PENALTY) >= PENALTY or metrics.get("emissions_g", PENALTY) >= PENALTY:
+            continue
+
         segs = metrics.get("segments") or []
-        time_total = sum(seg.get("time_s", 0.0) for seg in segs)
         path_simplified = metrics.get("path_simplified")
         if isinstance(path_simplified, list) and path_simplified:
-            path_out = path_simplified
+            path_out = list(path_simplified)
         else:
-            path_out = list(ind)
+            path_out = path_raw
+
+        path_key = tuple(path_out)
+        if path_key in seen_paths:
+            continue
+        seen_paths.add(path_key)
+
         solutions.append({
             "path": path_out,
-            "time_s": time_total,
-            "emissions_g": metrics.get("emissions_g"),
-            "walk_m": metrics.get("walk_m"),
-            "fare_cost": metrics.get("fare_cost"),
-            "fare_selected": metrics.get("fare_selected"),
-            "n_transfers": metrics.get("n_transfers"),
-            "wait_s_total": metrics.get("wait_s_total"),
-            "waits": metrics.get("waits"),
-            "distance_km_by_mode": metrics.get("distance_km_by_mode"),
-            "zones_passed": metrics.get("zones_passed"),
+            "metrics": {
+                "time_total_s": metrics.get("time_total_s"),
+                "travel_time_s": metrics.get("travel_time_s"),
+                "waiting_time_s": metrics.get("waiting_time_s"),
+                "wait_s_total": metrics.get("wait_s_total"),
+                "emissions_g": metrics.get("emissions_g"),
+                "walk_m": metrics.get("walk_m"),
+                "n_transfers": metrics.get("n_transfers"),
+                "fare_cost": metrics.get("fare_cost"),
+                "fare_selected": metrics.get("fare_selected"),
+                "waits": metrics.get("waits"),
+                "distance_km_by_mode": metrics.get("distance_km_by_mode"),
+            },
             "segments": segs,
-            "has_walk": any(seg.get("mode") == "walk" for seg in segs),
+            "zones_passed": metrics.get("zones_passed"),
+            "has_walk": any(isinstance(seg, dict) and seg.get("mode") == "walk" for seg in segs),
         })
     pareto_path = os.path.join(PARETO_DIR, "pareto_solutions.json")
     with open(pareto_path, "w") as f:

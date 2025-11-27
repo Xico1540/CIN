@@ -57,17 +57,8 @@ pip install -r requirements.txt
 Exemplo mínimo com IDs de paragens (usando GTFS em `data/Metro` e `data/STCP`), a partir da pasta `CIN`:
 
 ```bash
-python src/main.py ^
-  --metro data/Metro ^
-  --stcp data/STCP ^
-  --origin 5697 ^
-  --dest CRG2 ^
-  --walk-radius 400 ^
-  --pop-size 30 ^
-  --gens 40 ^
-  --wmax-s 900 ^
-  --tmax 2 ^
-  --walk-policy minimize
+python src/main.py --metro data/Metro --stcp data/STCP --origin 5697 --dest CRG2  --walk-radius 400 --pop-size 30 --gens 40 --wmax-s 900 --tmax 2 
+--walk-policy minimize
 ```
 
 - **`--wmax-s`**: limite máximo de tempo total a pé (segundos), por exemplo `900` ≈ 15 minutos.

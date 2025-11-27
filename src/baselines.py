@@ -16,6 +16,11 @@ class BaselineSolution:
     path: List[str]
     metrics: Dict[str, float]
     weight_value: float
+    segments: List[dict] | None = None
+    zones_passed: List[str] | None = None
+    used_bridge_ids: List[str] | None = None
+    blocked_walk_edges_douro: int | None = None
+    has_walk: bool = False
 
 
 def _edge_emissions(edge_data: dict) -> float:
@@ -84,6 +89,8 @@ def run_baseline_dijkstra(
     origin: str,
     dest: str,
     lambdas: Sequence[float] | None = None,
+    w_max: float | None = None,
+    t_max: int | None = None,
 ) -> List[BaselineSolution]:
     if lambdas is None:
         lambdas = DEFAULT_LAMBDAS
@@ -122,6 +129,25 @@ def run_baseline_dijkstra(
             metrics["fare_cost"] = 0.0
             metrics["fare_selected"] = None
 
+        walk_time_total = 0.0
+        has_walk = False
+        for seg in segments:
+            if isinstance(seg, dict) and seg.get("mode") == "walk":
+                has_walk = True
+                walk_time_total += float(seg.get("time_s", seg.get("time", 0.0)) or 0.0)
+
+        if w_max is not None and walk_time_total > w_max:
+            continue
+
+        transfers = metrics.get("n_transfers")
+        if t_max is not None and transfers is not None:
+            try:
+                transfers_val = int(transfers)
+            except (TypeError, ValueError):
+                transfers_val = None
+            if transfers_val is not None and transfers_val > t_max:
+                continue
+
         time_total = metrics.get("time_total_s")
         emissions = metrics.get("emissions_g")
         walk_m = metrics.get("walk_m")
@@ -150,10 +176,32 @@ def run_baseline_dijkstra(
             "waits": metrics.get("waits"),
             "distance_km_by_mode": metrics.get("distance_km_by_mode"),
             "fare_selected": metrics.get("fare_selected"),
+            "walk_time_s": walk_time_total,
         }
         weight_value = _accumulate_weight(path, graph, lam)
 
-        solutions.append(BaselineSolution(lam=lam, path=list(path), metrics=record, weight_value=weight_value))
+        used_bridges = sorted(
+            {
+                seg.get("bridge_id")
+                for seg in segments
+                if isinstance(seg, dict) and seg.get("mode") == "walk" and seg.get("bridge_id")
+            }
+        )
+        blocked_walk_edges = getattr(graph, "blocked_douro_walk_edges", 0)
+
+        solutions.append(
+            BaselineSolution(
+                lam=lam,
+                path=list(path),
+                metrics=record,
+                weight_value=weight_value,
+                segments=segments,
+                zones_passed=metrics.get("zones_passed"),
+                used_bridge_ids=used_bridges,
+                blocked_walk_edges_douro=blocked_walk_edges,
+                has_walk=has_walk,
+            )
+        )
         seen_paths.add(key)
 
     return solutions
@@ -163,6 +211,8 @@ def baseline_for_scenarios(
     graph,
     scenarios: Dict[str, List[Dict[str, object]]],
     lambdas: Sequence[float] | None = None,
+    w_max: float | None = None,
+    t_max: int | None = None,
 ) -> List[Dict[str, object]]:
     collected: List[Dict[str, object]] = []
     for scenario_type, items in scenarios.items():
@@ -172,7 +222,14 @@ def baseline_for_scenarios(
             if origin is None or dest is None:
                 continue
 
-            solutions = run_baseline_dijkstra(graph, origin, dest, lambdas=lambdas)
+            solutions = run_baseline_dijkstra(
+                graph,
+                origin,
+                dest,
+                lambdas=lambdas,
+                w_max=w_max,
+                t_max=t_max,
+            )
 
             # Aplicar filtro Pareto 2D (tempo total, emissões) às soluções baseline.
             pareto_solutions = _pareto_filter_solutions(solutions)
@@ -202,6 +259,11 @@ def baseline_for_scenarios(
                         "path": sol.path,
                         "metrics": sol.metrics,
                         "weight_value": sol.weight_value,
+                        "segments": sol.segments,
+                        "zones_passed": sol.zones_passed,
+                        "used_bridge_ids": sol.used_bridge_ids,
+                        "blocked_walk_edges_douro": sol.blocked_walk_edges_douro,
+                        "has_walk": sol.has_walk,
                         "extreme": extreme,
                     }
                 )

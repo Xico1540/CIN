@@ -41,13 +41,21 @@ def hypervolume_2d_min(points: Iterable[Point], ref: Point) -> float:
     return max(0.0, hv)
 
 
-def make_reference_from_union(a: Iterable[Point], b: Iterable[Point], margin: float = 1.10) -> Point:
-    """Cria um ponto de referência (ref) a partir da união de dois conjuntos."""
+def make_reference_from_union(
+    a: Iterable[Point],
+    b: Iterable[Point],
+    margin: float = 1.05,
+) -> Point:
+    """
+    Cria um ponto de referência (ref) a partir da união de dois conjuntos.
+    Usa apenas pontos não-dominados para evitar outliers dominados a empurrar o ref.
+    """
     pts = list(a) + list(b)
-    if not pts:
+    nd_points = pareto_filter_2d_min(pts)
+    if not nd_points:
         return (1.0, 1.0)
-    max_x = max(p[0] for p in pts)
-    max_y = max(p[1] for p in pts)
+    max_x = max(p[0] for p in nd_points)
+    max_y = max(p[1] for p in nd_points)
     return (
         (max_x * margin) if max_x > 0 else 1.0,
         (max_y * margin) if max_y > 0 else 1.0,
