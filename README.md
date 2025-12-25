@@ -2,7 +2,7 @@
 
 Projeto em Python que constrói um **grafo multimodal** (Metro + STCP + a pé) a partir de dados **GTFS** e encontra rotas entre origem e destino com **otimização multi-objetivo**.
 
-## Constituição do grupo
+## Constituição do grupo - Grupo 1
 Francisco Costa PG60387
 João Mendes PG60388
 Simão Silva PG60393
