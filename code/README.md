@@ -14,7 +14,7 @@ Projeto em Python que constrói um **grafo multimodal** (Metro + STCP + a pé) a
 ## Estrutura do Repositório
 
 ```
-CIN/
+CIN/code/
 ├── app/                    # Interface web Streamlit
 │   └── streamlit_app.py   # Aplicação web interativa
 ├── data/                   # Dados GTFS e regras
