@@ -41,8 +41,7 @@ CIN/code/
 │   ├── main.py              # Script principal CLI
 │   └── scenarios.py         # Geração de cenários
 ├── README.md                # Este ficheiro
-├── requirements.txt         # Dependências Python
-└── PROJETO.md              # Apresentação do projeto (relatório + manual)
+└── requirements.txt         # Dependências Python
 ```
 
 ## Objetivos e restrições
@@ -81,7 +80,17 @@ pip install -r requirements.txt
 - Introduz origem/destino (nome, ID ou coordenadas) e escolhe prioridades (tempo, CO₂, exercício, equilíbrio).
 - A app gera o Pareto atual, mostra tabela comparativa e descreve passo a passo da rota selecionada.
 
+## Tecnologias Utilizadas
+
+- **Python 3.10+**
+- **NetworkX**: grafos e algoritmos de caminho
+- **Pandas**: manipulação de dados GTFS
+- **DEAP**: algoritmos evolutivos (NSGA-II)
+- **Streamlit**: interface web interativa
+
 ## Documentação
-- [CLI / Como executar](docs/CLI.md)
-- [Outputs / Ficheiros gerados](docs/OUTPUTS.md)
-- [Modelo e decisões do projeto](docs/MODEL.md)
+- **[Manual do Utilizador](code/docs/USER_GUIDE.md)**: Guia completo de utilização da interface web
+- **[Relatório do Projeto](report/Relatório.pdf)**: Relatório técnico completo
+- [CLI / Como executar](code/docs/CLI.md): Guia de linha de comandos
+- [Outputs / Ficheiros gerados](code/docs/OUTPUTS.md): Descrição dos outputs gerados
+- [Modelo e decisões do projeto](code/docs/MODEL.md): Modelo e decisões técnicas
